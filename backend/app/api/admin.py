@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.db import get_db
 from app.models.system import DataSource, RecommendationJob
+from app.models_iface.portfolio_finrl import FinRLDRLPortfolioModel
 from app.providers.upstox import UpstoxProvider
 from app.services.upstox_auth import store_upstox_token
 
@@ -59,6 +60,10 @@ class DebugOut(BaseModel):
     demo_mode: bool
     upstox_configured: bool
     qwen_configured: bool
+    # FinRL is never used to drive live recommendations (mean-variance is)
+    # -- this just reports whether scripts/train_finrl_agent.py has been run.
+    # Any output from it is lightly-trained/not-validated (Section 74).
+    finrl_checkpoint_trained: bool
     data_sources: list[DataSourceStatus]
     recent_jobs: list[JobStatus]
 
@@ -73,6 +78,7 @@ async def debug(db: AsyncSession = Depends(get_db)):
         demo_mode=settings.demo_mode,
         upstox_configured=settings.upstox_configured,
         qwen_configured=settings.qwen_configured,
+        finrl_checkpoint_trained=FinRLDRLPortfolioModel.is_trained(),
         data_sources=[
             DataSourceStatus(
                 name=s.name, kind=s.kind, status=s.status, last_synced_at=s.last_synced_at, token_expires_at=s.token_expires_at

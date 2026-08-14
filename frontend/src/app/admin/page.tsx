@@ -7,6 +7,7 @@ interface DebugOut {
   demo_mode: boolean;
   upstox_configured: boolean;
   qwen_configured: boolean;
+  finrl_checkpoint_trained: boolean;
   data_sources: { name: string; kind: string; status: string; last_synced_at: string | null; token_expires_at: string | null }[];
   recent_jobs: { id: string; status: string; error: string | null; created_at: string }[];
 }
@@ -35,10 +36,14 @@ export default function AdminPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
       {debug && (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-4">
             <Stat label="Demo mode" value={String(debug.demo_mode)} />
             <Stat label="Upstox configured" value={String(debug.upstox_configured)} />
             <Stat label="Qwen configured" value={String(debug.qwen_configured)} />
+            <Stat
+              label="FinRL checkpoint"
+              value={debug.finrl_checkpoint_trained ? "trained (unvalidated)" : "not trained"}
+            />
           </div>
 
           <div className="rounded border bg-white p-4">

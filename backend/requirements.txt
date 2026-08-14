@@ -24,7 +24,21 @@ python-jose[cryptography]==3.3.0
 python-multipart==0.0.9
 tenacity==9.0.0
 PyYAML==6.0.2
-git+https://github.com/shiyu-coder/Kronos.git
+
+# Kronos (github.com/shiyu-coder/Kronos) itself is NOT pip-installable -- no
+# setup.py/pyproject.toml. It's cloned separately (see backend/Dockerfile and
+# run.sh) and put on sys.path by app/models_iface/kronos.py. These are just
+# its own runtime dependencies not already covered above (its own
+# requirements.txt also pins matplotlib/tqdm, which are only needed for its
+# plotting/demo scripts, not headless inference -- skipped here).
+einops==0.8.1
+safetensors==0.6.2
+
+# FinRL DRL portfolio agent -- train-once-offline path (Section 12), see
+# app/models_iface/portfolio_finrl.py and scripts/train_finrl_agent.py.
+# Not required for the app to run; only needed if training/using that agent.
+stable-baselines3==2.3.2
+gymnasium==0.29.1
 
 pytest==8.3.3
 pytest-asyncio==0.24.0

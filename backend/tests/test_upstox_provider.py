@@ -11,7 +11,7 @@ from app.providers.nifty50_seed import NIFTY50_SEED
 from app.providers.upstox import UPSTOX_BASE, UpstoxAuthRequired, UpstoxProvider
 from app.services.technical_analysis import compute_technical_features
 
-RELIANCE = NIFTY50_SEED[0]  # symbol="RELIANCE"
+RELIANCE = next(s for s in NIFTY50_SEED if s.symbol == "RELIANCE")
 
 
 def _sample_candles_payload(n: int = 220) -> dict:

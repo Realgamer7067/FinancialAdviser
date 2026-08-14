@@ -13,6 +13,13 @@ fi
 source backend/.venv/bin/activate
 pip install -q -r backend/requirements.txt
 
+# Kronos (github.com/shiyu-coder/Kronos) has no setup.py/pyproject.toml -- not
+# pip-installable. Clone it once; app/models_iface/kronos.py finds it via
+# KRONOS_REPO_PATH (defaults to backend/vendor/kronos).
+if [ ! -d backend/vendor/kronos ]; then
+  git clone --depth 1 https://github.com/shiyu-coder/Kronos.git backend/vendor/kronos
+fi
+
 export $(grep -v '^#' .env | xargs)
 
 cd backend

@@ -2,16 +2,22 @@
 TimeSeriesModel implementation. CPU inference -- the -small variant (24.7M
 params) is sized for this (see build plan compute decision).
 
-Usage follows the Kronos repo's documented `KronosPredictor` pattern
-(tokenizer + model + predictor.predict(df=...)). Re-verify the exact call
-signature against https://github.com/shiyu-coder/Kronos at implementation
-time -- the package wasn't installed/exercised in this build environment, so
-this adapter fails loudly (returns None, Section 50) rather than silently if
-the installed version's API differs, instead of guessing.
+The Kronos GitHub repo has no setup.py/pyproject.toml -- it is NOT
+pip-installable (an earlier version of this project incorrectly pinned
+`git+https://github.com/shiyu-coder/Kronos.git` in requirements.txt, which
+installs nothing usable). It must be `git clone`d and put on `sys.path`
+instead -- see `settings.kronos_repo_path` (set by the Dockerfile / run.sh).
+Usage follows the repo's documented `KronosPredictor` pattern (tokenizer +
+model + predictor.predict(df=..., x_timestamp=..., y_timestamp=...,
+pred_len=..., T=1.0, top_p=0.9, sample_count=1)) -- confirmed against the
+repo README and both Hugging Face model cards, and verified against a real
+clone + real forecast during development.
 """
 
 import asyncio
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 
@@ -30,7 +36,10 @@ class KronosModel(TimeSeriesModel):
 
     def _ensure_loaded(self):
         if KronosModel._predictor is None:
-            from model import Kronos, KronosPredictor, KronosTokenizer  # Kronos package
+            repo_path = str(Path(settings.kronos_repo_path).resolve())
+            if repo_path not in sys.path:
+                sys.path.insert(0, repo_path)
+            from model import Kronos, KronosPredictor, KronosTokenizer  # Kronos package (not pip-installed)
 
             tokenizer = KronosTokenizer.from_pretrained(settings.kronos_tokenizer_id)
             model = Kronos.from_pretrained(settings.kronos_model_id)

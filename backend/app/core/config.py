@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     hf_home: str = "./data/cache/huggingface"
     kronos_model_id: str = "NeoQuasar/Kronos-small"
     kronos_tokenizer_id: str = "NeoQuasar/Kronos-Tokenizer-base"
+    # The Kronos repo (github.com/shiyu-coder/Kronos) has no setup.py/pyproject.toml
+    # -- it's not pip-installable. This must point at a `git clone` of it (done by
+    # the Dockerfile / run.sh) so `from model import ...` resolves via sys.path.
+    kronos_repo_path: str = "./vendor/kronos"
     finbert_model_id: str = "ProsusAI/finbert"
 
     worker_poll_interval_seconds: int = 5

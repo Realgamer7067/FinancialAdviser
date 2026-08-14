@@ -3,11 +3,14 @@ __pycache__/
 *.pyc
 .venv/
 backend/.venv/
+backend/vendor/
+/vendor/
 data/cache/
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+!data/processed/nifty50_instruments.json
 node_modules/
 frontend/.next/
 frontend/out/

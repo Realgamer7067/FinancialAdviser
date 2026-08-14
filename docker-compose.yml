@@ -21,6 +21,7 @@ services:
     environment:
       CONFIG_DIR: /app/config
       DATA_DIR: /app/data
+      KRONOS_REPO_PATH: /opt/kronos
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,6 +40,7 @@ services:
     environment:
       CONFIG_DIR: /app/config
       DATA_DIR: /app/data
+      KRONOS_REPO_PATH: /opt/kronos
     depends_on:
       postgres:
         condition: service_healthy
