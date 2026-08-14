@@ -1,0 +1,20 @@
+# Stock-universe reduction thresholds (Section 15). Configurable, not hardcoded.
+universe: nifty50
+
+liquidity_screen:
+  min_avg_daily_volume: 100000
+  min_market_cap_cr: 5000
+
+fundamental_screen:
+  max_debt_to_equity: 3.0
+  min_roe: 0.0          # UNKNOWN values are excluded, not defaulted to pass
+  exclude_pledged_promoter_holding_above: 0.5
+
+technical_screen:
+  max_volatility_30d: 0.6
+  exclude_below_sma_200: false   # informational only, not an automatic exclusion
+
+candidate_limits:
+  after_fundamental_technical_screen: 40
+  after_kronos_news: 15
+  final_council_input: 10

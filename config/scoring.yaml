@@ -1,0 +1,24 @@
+# Deterministic final-score weights (Section 18). Must sum to 1.0.
+# The score is computed in Python, never invented by the LLM.
+weights:
+  fundamental: 0.25
+  kronos: 0.20
+  news: 0.15
+  technical: 0.15
+  portfolio: 0.15
+  risk: 0.10
+
+# Recommendation label thresholds, applied to the final 0-100 score
+# AFTER the risk gate has run (Section 20).
+thresholds:
+  strong_candidate: 80
+  candidate: 65
+  watchlist: 50
+  # below watchlist -> NO_RECOMMENDATION
+
+# Confidence bands (Section 19), derived from measurable evidence-consistency factors,
+# never a bare LLM-stated percentage.
+confidence:
+  high_min: 0.75
+  medium_min: 0.5
+  # below medium_min -> low confidence, forces NO_RECOMMENDATION regardless of score
