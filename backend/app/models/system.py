@@ -26,7 +26,7 @@ class DataSource(Base, UUIDPKMixin):
 
     __tablename__ = "data_sources"
 
-    name: Mapped[str] = mapped_column(String, unique=True)  # "upstox" / "rss_economic_times" / ...
+    name: Mapped[str] = mapped_column(String, unique=True)  # "yfinance" / "rss_economic_times" / ...
     kind: Mapped[str] = mapped_column(String)  # market / news / fundamentals / llm
     status: Mapped[str] = mapped_column(String, default="unconfigured")  # ok/degraded/error/unconfigured
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

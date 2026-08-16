@@ -5,14 +5,11 @@ import { api, ApiError } from "@/lib/api";
 
 interface DebugOut {
   demo_mode: boolean;
-  upstox_configured: boolean;
   qwen_configured: boolean;
   finrl_checkpoint_trained: boolean;
   data_sources: { name: string; kind: string; status: string; last_synced_at: string | null; token_expires_at: string | null }[];
   recent_jobs: { id: string; status: string; error: string | null; created_at: string }[];
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function AdminPage() {
   const [debug, setDebug] = useState<DebugOut | null>(null);
@@ -36,9 +33,8 @@ export default function AdminPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
       {debug && (
         <>
-          <div className="grid gap-4 sm:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Stat label="Demo mode" value={String(debug.demo_mode)} />
-            <Stat label="Upstox configured" value={String(debug.upstox_configured)} />
             <Stat label="Qwen configured" value={String(debug.qwen_configured)} />
             <Stat
               label="FinRL checkpoint"
@@ -107,10 +103,6 @@ export default function AdminPage() {
               </tbody>
             </table>
           </div>
-
-          <a href={`${API_URL}/admin/upstox/login`} className="inline-block text-sm text-brand-700 underline">
-            Re-authenticate Upstox (daily token expiry)
-          </a>
         </>
       )}
     </div>

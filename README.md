@@ -1,7 +1,7 @@
 # Indian AI Equity Research Platform (MVP)
 
 AI-powered Indian equity research for beginner investors: structured onboarding, real
-(Upstox) or demo market data, deterministic fundamentals/technicals, a Kronos time-series
+(Yahoo Finance) or demo market data, deterministic fundamentals/technicals, a Kronos time-series
 forecast, FinBERT news sentiment, a mean-variance portfolio optimizer, and a Qwen-based
 analyst council -- all feeding a deterministic scoring/risk-gate layer that can (and does)
 say "no clear opportunity" instead of forcing a recommendation.
@@ -23,8 +23,8 @@ backtesting are all real and verified now, see "What's real" below for each one'
 
 ```bash
 cp .env.example .env
-# fill in UPSTOX_API_KEY/SECRET and QWEN_API_KEY if you have them --
-# the app runs fine without them in DEMO_MODE=true (the default)
+# fill in QWEN_API_KEY if you have one -- market data needs no key (Yahoo
+# Finance), the app runs fine without any keys in DEMO_MODE=true (the default)
 docker compose up --build
 ```
 
@@ -41,13 +41,6 @@ cd frontend && npm install && npm run dev   # frontend, separate terminal
 
 Requires a Postgres instance reachable at `DATABASE_URL` (see `.env.example`).
 
-## Upstox auth
-
-Upstox access tokens expire daily at 3:30 AM IST -- there is no silent refresh. Visit
-`/admin/upstox/login` each day (in a real deployment) to re-authenticate; until then, or
-whenever `DEMO_MODE=true` / no Upstox keys are set, the app transparently falls back to a
-clearly-flagged demo/cached market data provider.
-
 ## Running tests
 
 ```bash
@@ -61,9 +54,10 @@ pytest
 Everything below has actually been run end-to-end against real data during development, not
 just written and assumed to work -- see `SETUP.md` for how to reproduce each verification.
 
-- **Market data**: real Upstox market data + OAuth flow, with a clearly-flagged demo/cached
-  fallback. **Nifty50 universe** is synced from two live official sources (NSE's own
-  constituent list + Upstox's instrument master) via `scripts/sync_instruments.py` -- all 50
+- **Market data**: real Yahoo Finance market data, no account/OAuth needed, with a
+  clearly-flagged demo/cached fallback. **Nifty50 universe** is synced from two live official
+  sources (NSE's own constituent list + Upstox's public instrument master, used only for
+  symbol/ISIN cross-checking, no account needed) via `scripts/sync_instruments.py` -- all 50
   constituents, not a hand-typed subset (three of the original hand-typed ISINs were caught
   wrong by this cross-check, which is exactly why it isn't hand-maintained anymore).
 - **Fundamentals**: Yahoo-Finance-backed, real (if provisional -- see SETUP.md).

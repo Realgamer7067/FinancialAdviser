@@ -25,10 +25,6 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/equity_research"
     sync_database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/equity_research"
 
-    upstox_api_key: str = ""
-    upstox_api_secret: str = ""
-    upstox_redirect_uri: str = "http://localhost:8000/admin/upstox/callback"
-
     qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     qwen_api_key: str = ""
     qwen_model: str = "qwen2.5-32b-instruct"
@@ -43,10 +39,6 @@ class Settings(BaseSettings):
     finbert_model_id: str = "ProsusAI/finbert"
 
     worker_poll_interval_seconds: int = 5
-
-    @property
-    def upstox_configured(self) -> bool:
-        return bool(self.upstox_api_key and self.upstox_api_secret)
 
     @property
     def qwen_configured(self) -> bool:

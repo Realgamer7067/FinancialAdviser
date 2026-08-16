@@ -1,6 +1,6 @@
 """Provider interfaces (Section 5/6). Every external data source sits behind one
-of these -- swapping Upstox for another broker, or the RSS feed for a paid news
-API, is an adapter, not a rewrite of the pipeline."""
+of these -- swapping Yahoo Finance for a broker API, or the RSS feed for a paid
+news API, is an adapter, not a rewrite of the pipeline."""
 
 from abc import ABC, abstractmethod
 from datetime import date, datetime

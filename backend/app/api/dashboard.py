@@ -29,7 +29,7 @@ class DashboardOut(BaseModel):
 
 @router.get("", response_model=DashboardOut)
 async def get_dashboard(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    provider = await get_market_data_provider(db)
+    provider = await get_market_data_provider()
     try:
         status = await provider.get_market_status("NSE")
         market_status = status.status

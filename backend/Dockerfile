@@ -5,8 +5,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Kronos (github.com/shiyu-coder/Kronos) has no setup.py/pyproject.toml -- it's
 # not pip-installable, so it's cloned directly and put on PYTHONPATH instead.

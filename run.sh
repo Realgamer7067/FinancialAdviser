@@ -4,14 +4,19 @@ set -euo pipefail
 
 if [ ! -f .env ]; then
   cp .env.example .env
-  echo "Created .env from .env.example — fill in Upstox / Qwen keys before real (non-demo) use."
+  echo "Created .env from .env.example — fill in QWEN_API_KEY before real (non-demo) use; market data needs no key."
+fi
+
+if ! command -v uv >/dev/null 2>&1; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
 fi
 
 if [ ! -d backend/.venv ]; then
-  python3 -m venv backend/.venv
+  uv venv backend/.venv
 fi
 source backend/.venv/bin/activate
-pip install -q -r backend/requirements.txt
+uv pip install -q -r backend/requirements.txt
 
 # Kronos (github.com/shiyu-coder/Kronos) has no setup.py/pyproject.toml -- not
 # pip-installable. Clone it once; app/models_iface/kronos.py finds it via

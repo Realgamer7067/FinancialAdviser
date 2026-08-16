@@ -368,7 +368,7 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
         "liquidity_requirement": risk_profile.liquidity_requirement,
     }
 
-    market_provider = await get_market_data_provider(db)
+    market_provider = await get_market_data_provider()
     fundamentals_provider = YFinanceFundamentalProvider()
     news_provider = RSSNewsProvider()
     llm: LLMProvider = QwenOpenAICompatibleProvider()

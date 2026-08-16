@@ -1,6 +1,6 @@
-"""Fallback MarketDataProvider used in DEMO_MODE or when Upstox auth has expired
-(Section 65: cached/sample data, never presented as live -- every Quote/Candle
-here is flagged `is_stale=True` / `source="demo_seed"`)."""
+"""Fallback MarketDataProvider used in DEMO_MODE (Section 65: cached/sample
+data, never presented as live -- every Quote/Candle here is flagged
+`is_stale=True` / `source="demo_seed"`)."""
 
 import random
 from datetime import date, datetime, timedelta, timezone

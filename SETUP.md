@@ -11,12 +11,14 @@ summary; this doc is the longer version.
 | Docker + Docker Compose | Recommended | Easiest path -- runs Postgres, backend, worker, frontend together |
 | Python 3.11 + local Postgres | Alternative to Docker | For `./run.sh` (no-Docker path) |
 | Node.js 20+ | Yes, for the frontend | `node --version` |
-| Upstox account + API app | No | Without it, the app runs in `DEMO_MODE` with clearly-flagged synthetic market data |
 | Qwen API key (DashScope, OpenRouter, or self-hosted vLLM) | No | Without it, the council/planner steps are skipped and recommendations fall back to deterministic scoring only, with reduced confidence -- this is a documented degrade path (Section 50 of the build plan), not a crash |
 | GPU | No | Kronos and FinBERT are sized to run on CPU |
 
+Market data comes from Yahoo Finance -- no account, no API key, no KYC. `DEMO_MODE=true`
+still exists for a fully offline/synthetic run; set it `false` to use real Yahoo Finance data.
+
 You can get a fully working app with **zero external accounts** by leaving `.env`'s
-`DEMO_MODE=true` and the Upstox/Qwen keys blank.
+`DEMO_MODE=true` and `QWEN_API_KEY` blank.
 
 ## 2. First run (Docker)
 
@@ -71,8 +73,8 @@ anywhere; everything is forms and cards (by design, see build plan Section 3).
    profile, and a "Run analysis" button.
 4. **Run analysis** -- this does NOT block the browser. It creates a background job
    and the dashboard polls it every few seconds until it's done (typically well
-   under a minute in demo mode; longer if Qwen/Kronos/real Upstox data are wired in
-   and the universe screening does real network calls). Behind the scenes this runs
+   under a minute in demo mode; longer if Qwen/Kronos are wired in or the universe
+   screening does real network calls). Behind the scenes this runs
    the full pipeline: screen the Nifty50 seed universe -> Kronos forecast -> news
    sentiment -> portfolio optimization -> Qwen council (if configured) ->
    deterministic scoring -> risk gate.
@@ -90,16 +92,12 @@ anywhere; everything is forms and cards (by design, see build plan Section 3).
 
 ## 5. Wiring in real providers
 
-### Upstox (real market data instead of demo data)
+### Market data (real Yahoo Finance instead of demo data)
 
-1. Register an app at https://upstox.com/developer/ -- get an API key + secret.
-2. Put them in `.env` as `UPSTOX_API_KEY` / `UPSTOX_API_SECRET`, set `DEMO_MODE=false`.
-3. Restart the backend.
-4. Visit `http://localhost:8000/admin/upstox/login` and complete the Upstox login flow.
-5. **Important**: Upstox access tokens expire daily at 3:30 AM IST with no silent
-   refresh. You need to revisit that login URL each day for live data; until you do
-   (or if it's expired), the app automatically and visibly falls back to demo/cached
-   data rather than pretending stale data is live.
+Set `DEMO_MODE=false` in `.env` and restart the backend -- that's it, no account, no key.
+`YFinanceMarketDataProvider` (`app/providers/yfinance_market_data.py`) is the same free,
+unofficial, rate-limited source already used for fundamentals; not suitable for a licensed
+production product, but fine for research/testing.
 
 ### Qwen (the analyst council)
 
@@ -118,8 +116,8 @@ was unavailable -- it does not crash.
 ## 6. Admin/debug page
 
 `http://localhost:8000/admin/debug` (also linked from `/admin` in the frontend) shows:
-- whether demo mode / Upstox / Qwen are configured
-- data-source sync status and Upstox token expiry
+- whether demo mode / Qwen are configured
+- data-source sync status
 - the last 20 recommendation jobs and their status/errors
 
 Useful first stop when something looks wrong. **Not authentication-protected in this
@@ -129,14 +127,13 @@ MVP** -- don't expose it on a public network as-is.
 
 ```bash
 cd backend
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 pytest
 ```
 
-63 unit/integration tests cover risk scoring, deterministic sub-scores, the final
+59 unit/integration tests cover risk scoring, deterministic sub-scores, the final
 scoring/risk-gate logic, fundamental-ratio derivation, technical indicators, backtest
-metrics, the mean-variance optimizer's solver-failure fallbacks, and a mocked Upstox
-HTTP integration test.
+metrics, and the mean-variance optimizer's solver-failure fallbacks.
 
 ## 8. Kronos setup (not pip-installable)
 
