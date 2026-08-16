@@ -1,15 +1,7 @@
-function resolveApiUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
-  // Codespaces (and similar) serve the frontend from a forwarded
-  // https://<name>-3000.<domain> origin; localhost:8000 isn't reachable from
-  // there. The backend is forwarded on the same host with "-8000." instead.
-  if (typeof window !== "undefined" && window.location.hostname.includes("-3000.")) {
-    return `${window.location.protocol}//${window.location.hostname.replace("-3000.", "-8000.")}`;
-  }
-  return "http://localhost:8000";
-}
-
-const API_URL = resolveApiUrl();
+// Relative -- requests go through Next.js's own rewrite proxy (see
+// next.config.js), which forwards to the backend server-side. Same origin
+// as the page itself in every environment, so no CORS/URL-guessing needed.
+const API_URL = "";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;

@@ -56,7 +56,10 @@ services:
   frontend:
     build: ./frontend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      # Server-side only (read by next.config.js's rewrite proxy at request
+      # time) -- "backend" is the compose service hostname, reachable over
+      # the compose network regardless of what URL the browser is on.
+      INTERNAL_API_URL: http://backend:8000
     ports:
       - "3000:3000"
     depends_on:
