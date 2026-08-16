@@ -2,7 +2,9 @@
 questionnaire answers -> risk_score/risk_profile. Qwen interprets this output;
 it never computes or overrides it."""
 
-from typing import Literal, TypedDict
+from typing import Literal
+
+from typing_extensions import TypedDict
 
 DROP_20PCT_POINTS = {"sell_all": 0, "sell_some": 25, "hold": 60, "buy_more": 100}
 PRIORITY_POINTS = {"capital_preservation": 0, "balanced_growth": 50, "maximum_growth": 100}
