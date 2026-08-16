@@ -9,6 +9,10 @@ app = FastAPI(title="Indian AI Equity Research Platform", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
+    # Codespaces (and similar cloud dev environments) serve the frontend from
+    # a forwarded https://<name>-3000.app.github.dev origin, not localhost --
+    # without this, every request gets silently CORS-blocked in the browser.
+    allow_origin_regex=r"https://.*\.github\.dev",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

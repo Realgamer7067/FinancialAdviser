@@ -1,4 +1,15 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+function resolveApiUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  // Codespaces (and similar) serve the frontend from a forwarded
+  // https://<name>-3000.<domain> origin; localhost:8000 isn't reachable from
+  // there. The backend is forwarded on the same host with "-8000." instead.
+  if (typeof window !== "undefined" && window.location.hostname.includes("-3000.")) {
+    return `${window.location.protocol}//${window.location.hostname.replace("-3000.", "-8000.")}`;
+  }
+  return "http://localhost:8000";
+}
+
+const API_URL = resolveApiUrl();
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
