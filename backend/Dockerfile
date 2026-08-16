@@ -8,6 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git build-essen
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 COPY requirements.txt .
+# CPU-only torch wheel -- the default PyPI build drags in several GB of CUDA
+# kernels (nvidia-cublas-cu12, nvidia-cudnn-cu12, ...) that are never used;
+# Kronos/FinBERT are sized to run on CPU (no GPU in this stack).
+RUN uv pip install --system --no-cache torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --system --no-cache -r requirements.txt
 
 # Kronos (github.com/shiyu-coder/Kronos) has no setup.py/pyproject.toml -- it's
