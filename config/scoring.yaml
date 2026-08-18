@@ -16,6 +16,13 @@ thresholds:
   watchlist: 50
   # below watchlist -> NO_RECOMMENDATION
 
+  # Minimum risk_fit_score (Section 21) required to pass the gate at all.
+  # Raised in a high-volatility market regime (nifty_trend + india_vix, see
+  # services/market_regime.py) so a stock has to be a noticeably better fit
+  # for the user's risk profile before it's surfaced during turbulent markets.
+  risk_fit_floor: 30
+  high_volatility_risk_fit_floor: 45
+
 # Confidence bands (Section 19), derived from measurable evidence-consistency factors,
 # never a bare LLM-stated percentage.
 confidence:

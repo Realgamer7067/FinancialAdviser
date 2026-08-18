@@ -35,11 +35,13 @@ def sortino_ratio(returns: pd.Series, risk_free_rate: float, periods_per_year: i
     if len(returns) < 2:
         return 0.0
     excess = returns - risk_free_rate / periods_per_year
-    downside = excess[excess < 0]
-    downside_std = downside.std() if len(downside) > 0 else 0.0
-    if not downside_std:
+    # Standard downside-deviation formula: RMS of min(excess, 0) over the FULL
+    # series (not std() of just the negative subset, which understates risk
+    # and -- with a single downside period -- divides by a NaN std(ddof=1)).
+    downside_deviation = float(np.sqrt(np.mean(np.minimum(excess, 0.0) ** 2)))
+    if not downside_deviation:
         return 0.0
-    return float(excess.mean() / downside_std * np.sqrt(periods_per_year))
+    return float(excess.mean() / downside_deviation * np.sqrt(periods_per_year))
 
 
 def max_drawdown(returns: pd.Series) -> float:

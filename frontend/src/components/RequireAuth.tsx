@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getToken } from "@/lib/api";
+import { clearToken, getToken, isTokenExpired } from "@/lib/api";
 
 export default function RequireAuth({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!getToken()) {
+    const token = getToken();
+    if (!token || isTokenExpired(token)) {
+      clearToken();
       router.replace("/login");
     } else {
       setReady(true);

@@ -15,6 +15,7 @@ _VOL_LOW = 0.25
 _VOL_HIGH = 0.45
 _RISK_LADDER = ["conservative", "moderate", "aggressive"]
 _VOL_LADDER = ["low", "moderate", "high"]
+_KRONOS_MIN_CONFIDENCE = 0.15
 
 
 def _clip(x: float, lo: float = 0, hi: float = 100) -> float:
@@ -74,9 +75,15 @@ def technical_score(ev: TechnicalEvidence | None) -> float | None:
 def kronos_score(ev: KronosEvidence | None) -> float | None:
     if ev is None:
         return None
+    confidence = max(0.0, min(ev.confidence, 1.0))
+    if confidence < _KRONOS_MIN_CONFIDENCE:
+        # Too uncertain to treat as a real signal -- excluded from the weighted
+        # average like any other missing evidence (Section 8: never guess).
+        # Without this, a near-zero-confidence forecast still contributed
+        # exactly 50 (neutral midpoint), silently padding model_agreement.
+        return None
     direction_multiplier = {"bullish": 1, "neutral": 0, "bearish": -1}.get(ev.direction, 0)
     swing_magnitude = min(abs(ev.predicted_return) * 100 * 4, 40)  # cap a +/-10% forecast at +/-40 pts
-    confidence = max(0.0, min(ev.confidence, 1.0))
     return _clip(50 + swing_magnitude * direction_multiplier * confidence)
 
 

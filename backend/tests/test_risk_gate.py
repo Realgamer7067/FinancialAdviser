@@ -53,3 +53,18 @@ def test_poor_risk_fit_forces_no_recommendation():
 
 def test_unknown_risk_fit_does_not_block():
     assert apply_risk_gate(_breakdown(final_score=85, confidence_band="high"), risk_fit_score=None) == "STRONG_CANDIDATE"
+
+
+def test_high_volatility_regime_tightens_risk_fit_floor():
+    # 40 clears the baseline floor (30) but not the high-volatility floor (45)
+    # -- same evidence, different regime, different outcome (Section 33/20).
+    breakdown = _breakdown(final_score=85, confidence_band="high")
+    assert apply_risk_gate(breakdown, risk_fit_score=40, market_regime="bullish_low_volatility") == "STRONG_CANDIDATE"
+    assert apply_risk_gate(breakdown, risk_fit_score=40, market_regime="bullish_high_volatility") == "NO_RECOMMENDATION"
+
+
+def test_unknown_regime_uses_baseline_floor():
+    assert (
+        apply_risk_gate(_breakdown(final_score=85, confidence_band="high"), risk_fit_score=40, market_regime="unknown")
+        == "STRONG_CANDIDATE"
+    )

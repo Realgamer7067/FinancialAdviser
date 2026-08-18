@@ -7,13 +7,14 @@ throughout: screening/scoring/risk-gate are plain Python; Kronos/FinBERT/
 PyPortfolioOpt produce evidence; Qwen only synthesizes evidence it's handed.
 """
 
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import screening_config
+from app.core.config import screening_config, settings
 from app.council.orchestrator import run_candidate_council, run_planner
 from app.models.analysis import FinbertAnalysis, KronosPrediction, TechnicalFeatures
 from app.models.council import CandidateScore, CouncilOutput, CouncilRun
@@ -61,6 +62,8 @@ RISK_FREE_RATE = 0.07  # approx. Indian 10Y G-Sec yield proxy -- review periodic
 MAX_SINGLE_WEIGHT = 0.25
 HISTORY_DAYS = 400
 NEWS_WINDOW_DAYS = 14
+INTER_SYMBOL_DELAY_SECONDS = 0.2  # burst-rate headroom against yfinance's undocumented limits
+CANDLE_STALENESS_TOLERANCE_DAYS = 3  # weekend/holiday gaps don't force a refetch
 
 
 class PipelineError(Exception):
@@ -112,13 +115,53 @@ async def _sync_instruments(db: AsyncSession) -> dict[str, Instrument]:
 # ------------------------------------------------------------- candles -----
 
 
-async def _fetch_candles(provider: MarketDataProvider, symbol: str) -> list[Candle]:
+async def _get_cached_candles(db: AsyncSession, instrument_id: UUID) -> list[Candle] | None:
+    """MarketCandle rows persisted by a prior run, reused as a cache (Section 65:
+    don't hit a rate-limited upstream for data we already have). None means no
+    usable cache -- caller must fetch live."""
+    rows = (
+        await db.execute(
+            select(MarketCandle)
+            .where(MarketCandle.instrument_id == instrument_id, MarketCandle.interval == "1d")
+            .order_by(MarketCandle.timestamp)
+        )
+    ).scalars().all()
+    if not rows:
+        return None
+    if (date.today() - rows[-1].timestamp.date()).days > CANDLE_STALENESS_TOLERANCE_DAYS:
+        return None
+    return [
+        Candle(
+            timestamp=r.timestamp,
+            open=r.open,
+            high=r.high,
+            low=r.low,
+            close=r.close,
+            volume=r.volume,
+            source=r.source,
+            retrieved_at=r.retrieved_at,
+        )
+        for r in rows
+    ]
+
+
+async def _fetch_candles(
+    db: AsyncSession, provider: MarketDataProvider, instrument_id: UUID | None, symbol: str
+) -> tuple[list[Candle], bool]:
+    """Returns (candles, from_cache) -- callers must not re-persist candles that
+    were already read back from MarketCandle, or every cache hit would insert
+    duplicate rows."""
+    if instrument_id is not None:
+        cached = await _get_cached_candles(db, instrument_id)
+        if cached is not None:
+            return cached, True
+
     to_date = date.today()
     from_date = to_date - timedelta(days=HISTORY_DAYS)
     try:
-        return await provider.get_historical_ohlcv(symbol, "1d", from_date, to_date)
+        return await provider.get_historical_ohlcv(symbol, "1d", from_date, to_date), False
     except Exception:
-        return []  # Section 50: a failed symbol doesn't crash the run
+        return [], False  # Section 50: a failed symbol doesn't crash the run
 
 
 async def _persist_candles(db: AsyncSession, instrument_id: UUID, candles: list[Candle]) -> None:
@@ -143,9 +186,63 @@ async def _persist_candles(db: AsyncSession, instrument_id: UUID, candles: list[
 # --------------------------------------------------------- fundamentals ----
 
 
+async def _get_cached_fundamentals(db: AsyncSession, instrument: Instrument) -> FundamentalSnapshot | None:
+    """FundamentalMetrics rows persisted by a prior run, reused as a TTL cache --
+    yfinance `.info` is a single unofficial, rate-limited endpoint hit once per
+    symbol per pipeline run; without this every run re-fetches all ~50 symbols
+    regardless of how recently the last run fetched them."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.fundamentals_cache_ttl_hours)
+    row = (
+        await db.execute(
+            select(FundamentalMetrics)
+            .where(FundamentalMetrics.instrument_id == instrument.id, FundamentalMetrics.retrieved_at >= cutoff)
+            .order_by(FundamentalMetrics.retrieved_at.desc())
+            .limit(1)
+        )
+    ).scalars().first()
+    if row is None:
+        return None
+    return FundamentalSnapshot(
+        symbol=instrument.symbol,
+        as_of_date=row.as_of_date,
+        revenue=row.revenue,
+        revenue_growth=row.revenue_growth,
+        ebitda=row.ebitda,
+        ebitda_margin=row.ebitda_margin,
+        ebit=row.ebit,
+        pat=row.pat,
+        eps=row.eps,
+        eps_growth=row.eps_growth,
+        operating_cash_flow=row.operating_cash_flow,
+        free_cash_flow=row.free_cash_flow,
+        total_debt=row.total_debt,
+        debt_to_equity=row.debt_to_equity,
+        interest_coverage=row.interest_coverage,
+        roe=row.roe,
+        roce=row.roce,
+        operating_margin=row.operating_margin,
+        net_margin=row.net_margin,
+        pe=row.pe,
+        forward_pe=row.forward_pe,
+        pb=row.pb,
+        ev_ebitda=row.ev_ebitda,
+        dividend_yield=row.dividend_yield,
+        promoter_holding=row.promoter_holding,
+        promoter_pledging=row.promoter_pledging,
+        institutional_ownership=row.institutional_ownership,
+        market_cap=row.market_cap,
+        source=row.source,
+        retrieved_at=row.retrieved_at,
+    )
+
+
 async def _fetch_fundamentals(
     db: AsyncSession, instrument: Instrument, provider: YFinanceFundamentalProvider
 ) -> FundamentalSnapshot | None:
+    cached = await _get_cached_fundamentals(db, instrument)
+    if cached is not None:
+        return cached
+
     snapshot = await provider.get_fundamentals(instrument.symbol)
     if snapshot is None:
         return None
@@ -379,7 +476,7 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
 
     instruments = await _sync_instruments(db)
 
-    nifty_candles = await _fetch_candles(market_provider, "NIFTY50")
+    nifty_candles, _ = await _fetch_candles(db, market_provider, None, "NIFTY50")
     vix_quote = None
     try:
         vix_quote = await market_provider.get_quote("INDIA_VIX")
@@ -393,9 +490,9 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
 
     for seed in NIFTY50_SEED:
         instrument = instruments[seed.symbol]
-        candles = await _fetch_candles(market_provider, seed.symbol)
+        candles, from_cache = await _fetch_candles(db, market_provider, instrument.id, seed.symbol)
         candles_by_symbol[seed.symbol] = candles
-        if candles:
+        if candles and not from_cache:
             await _persist_candles(db, instrument.id, candles)
 
         snapshot = await _fetch_fundamentals(db, instrument, fundamentals_provider)
@@ -405,6 +502,7 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
         technicals_by_symbol[seed.symbol] = tech or {}  # downstream .get() calls stay safe on missing data
         if tech:
             db.add(TechnicalFeatures(instrument_id=instrument.id, **tech))
+        await asyncio.sleep(INTER_SYMBOL_DELAY_SECONDS)
     await db.flush()
 
     stage1 = [
@@ -516,6 +614,7 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
             user_profile_payload=user_profile_payload,
             risk_profile_label=risk_profile.risk_profile,
             plan=plan_content,
+            market_regime=market_regime["market_regime"],
         )
 
     if portfolio_result:
@@ -576,6 +675,7 @@ async def _evaluate_candidate(
     user_profile_payload: dict,
     risk_profile_label: str,
     plan: dict,
+    market_regime: str | None = None,
 ) -> None:
     last_price = candles[-1].close if candles else 0.0
     fundamental_ev = _to_fundamental_evidence(fundamentals)
@@ -632,7 +732,7 @@ async def _evaluate_candidate(
         technical_trend=technical_ev.trend if technical_ev else None,
         kronos_direction=kronos_ev.direction if kronos_ev else None,
     )
-    recommendation_label = apply_risk_gate(breakdown, sub_scores["risk"])
+    recommendation_label = apply_risk_gate(breakdown, sub_scores["risk"], market_regime)
 
     db.add(
         CandidateScore(

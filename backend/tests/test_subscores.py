@@ -63,6 +63,13 @@ def test_kronos_score_none_when_no_forecast():
     assert kronos_score(None) is None
 
 
+def test_kronos_score_none_when_confidence_too_low():
+    # A near-zero-confidence forecast must be excluded like any other missing
+    # signal, not silently contribute the neutral midpoint (50) as if real.
+    ev = KronosEvidence(forecast_horizon="30d", direction="bullish", predicted_return=0.05, confidence=0.05)
+    assert kronos_score(ev) is None
+
+
 def test_news_score_positive_sentiment_above_baseline():
     ev = NewsEvidence(sentiment=0.6, confidence=0.9, article_count=5)
     assert news_score(ev) > 50

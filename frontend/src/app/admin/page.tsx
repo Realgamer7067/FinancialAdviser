@@ -44,6 +44,7 @@ export default function AdminPage() {
 
           <div className="rounded border bg-white p-4">
             <h2 className="mb-2 font-medium">Data sources</h2>
+            <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="text-slate-500">
                 <tr>
@@ -71,10 +72,12 @@ export default function AdminPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
 
           <div className="rounded border bg-white p-4">
             <h2 className="mb-2 font-medium">Recent recommendation jobs</h2>
+            <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="text-slate-500">
                 <tr>
@@ -102,6 +105,7 @@ export default function AdminPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}

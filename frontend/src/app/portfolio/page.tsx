@@ -10,10 +10,17 @@ function PortfolioInner() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .get<PortfolioOut>("/api/portfolio/latest")
-      .then(setPortfolio)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load portfolio"));
+    const load = () => {
+      api
+        .get<PortfolioOut>("/api/portfolio/latest")
+        .then(setPortfolio)
+        .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load portfolio"));
+    };
+    load();
+    // Refetch on refocus -- a rerun triggered from another tab would otherwise
+    // leave this tab showing stale allocations indefinitely.
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
   }, []);
 
   if (error) return <p className="text-sm text-slate-600">{error}</p>;

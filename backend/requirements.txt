@@ -43,3 +43,4 @@ gymnasium==0.29.1
 pytest==8.3.3
 pytest-asyncio==0.24.0
 respx==0.21.1
+aiosqlite==0.20.0  # in-memory test DB for tests/conftest.py -- no Postgres/docker needed to run tests

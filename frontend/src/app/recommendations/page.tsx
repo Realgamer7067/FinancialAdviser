@@ -12,10 +12,17 @@ function RecommendationsInner() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .get<CouncilRunSummary>("/api/recommendations/latest")
-      .then(setRun)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load recommendations"));
+    const load = () => {
+      api
+        .get<CouncilRunSummary>("/api/recommendations/latest")
+        .then(setRun)
+        .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load recommendations"));
+    };
+    load();
+    // Refetch on refocus -- a rerun triggered from another tab would otherwise
+    // leave this tab showing a stale council run indefinitely.
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
   }, []);
 
   if (error) {

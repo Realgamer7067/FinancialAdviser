@@ -53,6 +53,15 @@ def test_sortino_ignores_upside_volatility():
     assert sortino_ratio(upside_only, 0.0, 252) >= sortino_ratio(mixed, 0.0, 252)
 
 
+def test_sortino_single_downside_period_is_finite_not_nan():
+    # std(ddof=1) of a single-element series is NaN; the old `not downside_std`
+    # guard didn't catch NaN (`not float('nan')` is False in Python), so this
+    # used to silently return NaN instead of a real number.
+    returns = pd.Series([0.01, 0.01, 0.01, -0.02])
+    result = sortino_ratio(returns, 0.0, 252)
+    assert not np.isnan(result)
+
+
 def test_max_drawdown_known_series():
     # Prices: 100 -> 110 -> 88 -> 99  (peak 110, trough 88 => -20% drawdown)
     returns = pd.Series([0.10, -0.20, 0.125])

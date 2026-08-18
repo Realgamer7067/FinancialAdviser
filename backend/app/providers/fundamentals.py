@@ -12,14 +12,22 @@ never estimated (Section 8 hard rule).
 """
 
 import asyncio
+import logging
 from datetime import date, datetime, timezone
 
 import yfinance as yf
+from tenacity import retry, stop_after_attempt, wait_exponential_jitter
 
 from app.providers.base import FundamentalDataProvider, FundamentalSnapshot
 from app.providers.nifty50_seed import NIFTY50_SEED
 
 _SOURCE = "yfinance_nifty50_seed"
+logger = logging.getLogger(__name__)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential_jitter(initial=1, max=8), reraise=True)
+def _fetch_info_raw(ticker: str) -> dict:
+    return yf.Ticker(ticker).info or {}
 
 
 def _safe_ratio(info: dict, key: str) -> float | None:
@@ -79,7 +87,13 @@ class YFinanceFundamentalProvider(FundamentalDataProvider):
 
     @staticmethod
     def _fetch_info(ticker: str) -> dict:
+        # Retried transiently above (rate-limit blocks/timeouts are common and
+        # transient on yfinance's unofficial endpoint). If it still fails after
+        # retries, log it distinctly from "ticker has no data" -- a silent
+        # `except: return {}` here would make rate-limit exhaustion
+        # indistinguishable from a genuinely missing ticker.
         try:
-            return yf.Ticker(ticker).info or {}
-        except Exception:
+            return _fetch_info_raw(ticker)
+        except Exception as exc:
+            logger.warning("yfinance fundamentals fetch failed for %s after retries: %s", ticker, exc)
             return {}

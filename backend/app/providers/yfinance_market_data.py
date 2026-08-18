@@ -8,16 +8,29 @@ Index tickers: NIFTY 50 -> `^NSEI`, India VIX -> `^INDIAVIX`. Equities use the
 """
 
 import asyncio
+import logging
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal
 
 import yfinance as yf
+from tenacity import retry, stop_after_attempt, wait_exponential_jitter
 
 from app.providers.base import Candle, InstrumentMeta, MarketDataProvider, MarketStatus, Quote
 from app.providers.nifty50_seed import NIFTY50_SEED
 
 IST = timezone(timedelta(hours=5, minutes=30))
 _SOURCE = "yfinance"
+logger = logging.getLogger(__name__)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential_jitter(initial=1, max=8), reraise=True)
+def _fast_info_raw(ticker: str) -> dict:
+    return yf.Ticker(ticker).fast_info
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential_jitter(initial=1, max=8), reraise=True)
+def _history_raw(ticker: str, start: date, end: date, interval: str):
+    return yf.Ticker(ticker).history(start=start, end=end, interval=interval)
 
 _INDEX_TICKERS = {"NIFTY50": "^NSEI", "INDIA_VIX": "^INDIAVIX"}
 _INTERVAL_TO_YF = {"1d": "1d", "1w": "1wk", "1mo": "1mo"}
@@ -35,7 +48,11 @@ class YFinanceMarketDataProvider(MarketDataProvider):
         return await asyncio.to_thread(self._fetch_quote, symbol)
 
     def _fetch_quote(self, symbol: str) -> Quote:
-        info = yf.Ticker(self._ticker(symbol)).fast_info
+        try:
+            info = _fast_info_raw(self._ticker(symbol))
+        except Exception as exc:
+            logger.warning("yfinance quote fetch failed for %s after retries: %s", symbol, exc)
+            raise
         now = datetime.now(timezone.utc)
         price = float(info["last_price"])
         return Quote(
@@ -60,9 +77,13 @@ class YFinanceMarketDataProvider(MarketDataProvider):
     def _fetch_history(
         self, symbol: str, interval: Literal["1d", "1w", "1mo"], from_date: date, to_date: date
     ) -> list[Candle]:
-        hist = yf.Ticker(self._ticker(symbol)).history(
-            start=from_date, end=to_date + timedelta(days=1), interval=_INTERVAL_TO_YF[interval]
-        )
+        try:
+            hist = _history_raw(
+                self._ticker(symbol), from_date, to_date + timedelta(days=1), _INTERVAL_TO_YF[interval]
+            )
+        except Exception as exc:
+            logger.warning("yfinance history fetch failed for %s after retries: %s", symbol, exc)
+            raise
         retrieved_at = datetime.now(timezone.utc)
         candles = [
             Candle(
