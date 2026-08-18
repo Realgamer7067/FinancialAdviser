@@ -3,7 +3,7 @@ previously zero coverage existed for the pipeline, worker, or council wiring.
 
 Runs the real pipeline against 3 real NIFTY50_SEED symbols, with only the
 network-touching pieces faked:
-- YFinanceFundamentalProvider -> fake (would otherwise hit real Yahoo Finance)
+- get_fundamental_provider() -> fake (would otherwise hit real Yahoo Finance)
 - RSSNewsProvider -> fake, returns no items (would otherwise hit real RSS feeds)
 - KronosModel -> fake, returns None (real one downloads model weights from HF
   on first use -- unsafe/slow/non-deterministic in CI)
@@ -58,7 +58,11 @@ class _FakeKronosModel:
 
 async def test_pipeline_runs_end_to_end_without_network(db_session, monkeypatch):
     monkeypatch.setattr(pipeline_module, "NIFTY50_SEED", pipeline_module.NIFTY50_SEED[:3])
-    monkeypatch.setattr(pipeline_module, "YFinanceFundamentalProvider", lambda: _FakeFundamentalsProvider())
+
+    async def _fake_get_fundamental_provider():
+        return _FakeFundamentalsProvider()
+
+    monkeypatch.setattr(pipeline_module, "get_fundamental_provider", _fake_get_fundamental_provider)
     monkeypatch.setattr(pipeline_module, "RSSNewsProvider", lambda: _FakeNewsProvider())
     monkeypatch.setattr(pipeline_module, "KronosModel", lambda: _FakeKronosModel())
 

@@ -29,9 +29,8 @@ from app.models_iface.finbert import FinBERTModel
 from app.models_iface.kronos import KronosModel
 from app.models_iface.llm import LLMProvider, QwenOpenAICompatibleProvider
 from app.models_iface.portfolio_mvo import MeanVariancePortfolioModel
-from app.providers.base import Candle, FundamentalSnapshot, MarketDataProvider
-from app.providers.factory import get_market_data_provider
-from app.providers.fundamentals import YFinanceFundamentalProvider
+from app.providers.base import Candle, FundamentalDataProvider, FundamentalSnapshot, MarketDataProvider
+from app.providers.factory import get_fundamental_provider, get_market_data_provider
 from app.providers.nifty50_seed import NIFTY50_SEED
 from app.providers.rss_news import RSSNewsProvider
 from app.risk.gate import apply_risk_gate
@@ -237,7 +236,7 @@ async def _get_cached_fundamentals(db: AsyncSession, instrument: Instrument) -> 
 
 
 async def _fetch_fundamentals(
-    db: AsyncSession, instrument: Instrument, provider: YFinanceFundamentalProvider
+    db: AsyncSession, instrument: Instrument, provider: FundamentalDataProvider
 ) -> FundamentalSnapshot | None:
     cached = await _get_cached_fundamentals(db, instrument)
     if cached is not None:
@@ -466,7 +465,7 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
     }
 
     market_provider = await get_market_data_provider()
-    fundamentals_provider = YFinanceFundamentalProvider()
+    fundamentals_provider = await get_fundamental_provider()
     news_provider = RSSNewsProvider()
     llm: LLMProvider = QwenOpenAICompatibleProvider()
     kronos = KronosModel()
