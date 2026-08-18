@@ -68,7 +68,12 @@ def _technical_evidence_from_prices(close: pd.Series) -> TechnicalEvidence | Non
     volatility_30d = float(daily_returns.tail(30).std() * (252**0.5)) if len(daily_returns) >= 5 else None
 
     return TechnicalEvidence(
-        rsi_14=rsi_last, trend=trend, volatility_30d=volatility_30d, drawdown_1y=None, macd_hist=macd_hist_last
+        rsi_14=rsi_last,
+        trend=trend,
+        volatility_30d=volatility_30d,
+        drawdown_1y=None,
+        macd_hist=macd_hist_last,
+        beta=None,
     )
 
 

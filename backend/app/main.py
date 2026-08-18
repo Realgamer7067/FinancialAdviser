@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, dashboard, jobs, onboarding, portfolio, recommendations, stocks
+from app.api import admin, auth, dashboard, education, jobs, onboarding, portfolio, recommendations, stocks
 from app.core.config import settings
 
 app = FastAPI(title="Indian AI Equity Research Platform", version="0.1.0")
@@ -26,6 +26,7 @@ app.include_router(stocks.router)
 app.include_router(portfolio.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
+app.include_router(education.router)
 
 
 @app.get("/health")

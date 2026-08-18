@@ -26,6 +26,7 @@ class TechnicalEvidence(BaseModel):
     volatility_30d: float | None
     drawdown_1y: float | None
     macd_hist: float | None
+    beta: float | None
 
 
 class KronosEvidence(BaseModel):

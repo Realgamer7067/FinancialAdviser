@@ -29,3 +29,33 @@ confidence:
   high_min: 0.75
   medium_min: 0.5
   # below medium_min -> low confidence, forces NO_RECOMMENDATION regardless of score
+
+# Composite stock risk-tier classification (distinct from risk_fit_score, which is
+# how well a stock's volatility matches the USER's risk tolerance -- this is the
+# stock's OWN objective risk level, from a fuller signal set than volatility alone).
+# Each signal below is bucketed into a 0-100 "riskiness" score, then weight-averaged
+# over whichever signals are actually present -- never guessed when data is missing
+# (Section 8: an instrument with fewer than min_inputs signals gets risk_tier=None).
+risk_tier:
+  min_inputs: 2
+  weights:
+    volatility_30d: 0.40
+    drawdown_1y: 0.25
+    beta: 0.20
+    debt_to_equity: 0.15
+
+  # [upper_bound_exclusive, riskiness_points] pairs, first match wins.
+  # 0.60 mirrors screening.yaml technical_screen.max_volatility_30d.
+  volatility_bands: [[0.20, 20], [0.30, 40], [0.45, 65], [0.60, 85], [999, 100]]
+  # evaluated against abs(drawdown_1y) -- drawdown_1y is stored as a negative fraction.
+  drawdown_bands: [[0.10, 15], [0.20, 35], [0.35, 60], [0.50, 80], [999, 100]]
+  beta_bands: [[0.7, 15], [1.0, 35], [1.3, 60], [1.6, 80], [999, 100]]
+  # 3.0 mirrors screening.yaml fundamental_screen.max_debt_to_equity.
+  debt_to_equity_bands: [[0.5, 15], [1.0, 30], [2.0, 55], [3.0, 75], [999, 95]]
+
+  # Composite riskiness (0-100, higher = riskier) -> 4-band tier label.
+  thresholds:
+    safer: 30      # score < 30        -> "safer"
+    moderate: 55   # 30  <= score < 55 -> "moderate"
+    risky: 80      # 55  <= score < 80 -> "risky"
+                    # score >= 80       -> "riskiest"

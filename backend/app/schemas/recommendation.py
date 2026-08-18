@@ -12,11 +12,18 @@ class RecommendationCard(BaseModel):
     confidence: float
     score: float
     risk_level: str
+    risk_tier: str | None
     suggested_horizon: str
     strengths: list[str]
     risks: list[str]
     rationale: str
     evidence: dict
+    fundamental_score: float | None
+    technical_score: float | None
+    kronos_score: float | None
+    news_score: float | None
+    portfolio_score: float | None
+    risk_score: float | None
     model_agreement: float
     data_quality: float
     generated_at: datetime

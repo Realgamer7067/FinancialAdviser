@@ -22,6 +22,7 @@ class TechnicalsOut(BaseModel):
     volatility_30d: float | None
     drawdown_1y: float | None
     macd_hist: float | None
+    beta: float | None
     computed_at: datetime
 
 
@@ -51,3 +52,14 @@ class StockDetail(BaseModel):
     kronos: KronosOut | None
     news: NewsOut | None
     recommendation: RecommendationCard | None
+
+
+class PriceHistoryPoint(BaseModel):
+    timestamp: datetime
+    close: float
+
+
+class PriceHistoryOut(BaseModel):
+    symbol: str
+    interval: str
+    points: list[PriceHistoryPoint]

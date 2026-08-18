@@ -21,10 +21,15 @@ Left real/unmocked, deliberately:
 
 from datetime import date, datetime, timezone
 
+from sqlalchemy import select
+
 from app.core.security import hash_password
+from app.models.recommendation import Recommendation
 from app.models.user import RiskProfile, User, UserProfile
 from app.pipelines import recommendation_pipeline as pipeline_module
 from app.providers.base import FundamentalSnapshot
+
+_VALID_RISK_TIERS = {"safer", "moderate", "risky", "riskiest"}
 
 
 class _FakeFundamentalsProvider:
@@ -104,3 +109,9 @@ async def test_pipeline_runs_end_to_end_without_network(db_session, monkeypatch)
     assert council_run.status == "done"
     assert council_run.universe_size == 3
     assert council_run.candidates_after_screen >= 0
+
+    recommendations = (
+        await db_session.execute(select(Recommendation).where(Recommendation.council_run_id == council_run.id))
+    ).scalars().all()
+    for rec in recommendations:
+        assert rec.risk_tier is None or rec.risk_tier in _VALID_RISK_TIERS

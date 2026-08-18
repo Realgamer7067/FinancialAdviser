@@ -50,6 +50,7 @@ from app.scoring.subscores import (
     news_score as calc_news_score,
     portfolio_score as calc_portfolio_score,
     risk_fit_score as calc_risk_fit_score,
+    risk_tier as calc_risk_tier,
     technical_score as calc_technical_score,
     volatility_band,
 )
@@ -656,6 +657,7 @@ def _to_technical_evidence(tech: dict) -> TechnicalEvidence | None:
         volatility_30d=tech.get("volatility_30d"),
         drawdown_1y=tech.get("drawdown_1y"),
         macd_hist=tech.get("macd_hist"),
+        beta=tech.get("beta"),
     )
 
 
@@ -761,6 +763,10 @@ async def _evaluate_candidate(
     # This stock's own observed risk (volatility band), not the user's risk
     # tolerance -- those are deliberately separate concepts (Section 21).
     stock_risk_level = volatility_band(technical_ev.volatility_30d if technical_ev else None) or "unknown"
+    # Composite 4-band tier from the fuller signal set (volatility/drawdown/
+    # beta/debt-to-equity) -- distinct from risk_level above, and allowed to
+    # stay None when too few signals are available (Section 8: never guess).
+    stock_risk_tier = calc_risk_tier(technical_ev, fundamental_ev)
     db.add(
         Recommendation(
             user_id=council_run.user_id,
@@ -770,11 +776,18 @@ async def _evaluate_candidate(
             confidence=breakdown.confidence,
             score=breakdown.final_score,
             risk_level=stock_risk_level,
+            risk_tier=stock_risk_tier,
             suggested_horizon=f"{horizon_years}+ years",
             strengths=strengths,
             risks=risks,
             evidence=evidence.model_dump(),
             rationale=rationale,
+            fundamental_score=breakdown.fundamental,
+            technical_score=breakdown.technical,
+            kronos_score=breakdown.kronos,
+            news_score=breakdown.news,
+            portfolio_score=breakdown.portfolio,
+            risk_score=breakdown.risk,
             model_agreement=breakdown.model_agreement,
             data_quality=breakdown.data_quality,
             generated_at=datetime.now(timezone.utc),

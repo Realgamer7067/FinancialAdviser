@@ -3,6 +3,7 @@ evidence, never invented by the LLM. Each returns None when the underlying
 evidence is UNKNOWN -- excluded from the weighted average, not zero-filled
 (Section 8: never guess)."""
 
+from app.core.config import scoring_config
 from app.scoring.evidence import (
     FundamentalEvidence,
     KronosEvidence,
@@ -120,3 +121,55 @@ def risk_fit_score(user_risk_profile: str, ev: TechnicalEvidence | None) -> floa
         return None
     distance = abs(_RISK_LADDER.index(user_risk_profile) - _VOL_LADDER.index(band))
     return {0: 100, 1: 60, 2: 20}[distance]
+
+
+def _bucket(value: float, bands: list[list[float]]) -> float:
+    for upper, points in bands:
+        if value < upper:
+            return points
+    return bands[-1][1]
+
+
+def risk_tier_score(
+    technical_ev: TechnicalEvidence | None, fundamental_ev: FundamentalEvidence | None
+) -> float | None:
+    """Composite 0-100 "riskiness" of the stock itself (higher = riskier),
+    from whichever of volatility/drawdown/beta/debt-to-equity are present --
+    distinct from risk_fit_score, which is about the USER's fit, not the
+    stock's own objective risk level."""
+    cfg = scoring_config()["risk_tier"]
+    parts: dict[str, float] = {}
+
+    if technical_ev is not None:
+        if technical_ev.volatility_30d is not None:
+            parts["volatility_30d"] = _bucket(technical_ev.volatility_30d, cfg["volatility_bands"])
+        if technical_ev.drawdown_1y is not None:
+            parts["drawdown_1y"] = _bucket(abs(technical_ev.drawdown_1y), cfg["drawdown_bands"])
+        if technical_ev.beta is not None:
+            parts["beta"] = _bucket(technical_ev.beta, cfg["beta_bands"])
+    if fundamental_ev is not None and fundamental_ev.debt_to_equity is not None:
+        parts["debt_to_equity"] = _bucket(fundamental_ev.debt_to_equity, cfg["debt_to_equity_bands"])
+
+    if len(parts) < cfg["min_inputs"]:
+        return None
+
+    weights = cfg["weights"]
+    weight_sum = sum(weights[k] for k in parts)
+    raw = sum(parts[k] * weights[k] for k in parts) / weight_sum
+    return _clip(raw)
+
+
+def risk_tier(
+    technical_ev: TechnicalEvidence | None, fundamental_ev: FundamentalEvidence | None
+) -> str | None:
+    score = risk_tier_score(technical_ev, fundamental_ev)
+    if score is None:
+        return None
+    t = scoring_config()["risk_tier"]["thresholds"]
+    if score < t["safer"]:
+        return "safer"
+    if score < t["moderate"]:
+        return "moderate"
+    if score < t["risky"]:
+        return "risky"
+    return "riskiest"
