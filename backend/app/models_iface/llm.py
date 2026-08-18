@@ -74,7 +74,17 @@ class QwenOpenAICompatibleProvider(LLMProvider):
             # (Section 50: a failed specialist shouldn't take down the run).
             raise StructuredOutputError(f"Qwen API call failed: {exc}") from exc
 
-        raw = response.choices[0].message.content
+        choice = response.choices[0]
+        raw = choice.message.content
+        if not raw:
+            # Some OpenAI-compatible backends (OpenRouter routing to a
+            # reasoning/free-tier model, content filtering, truncation) return
+            # a 200 with an empty/None message.content instead of an API
+            # error. Treat that the same as any other malformed-output case
+            # rather than crashing the whole pipeline run.
+            raise StructuredOutputError(
+                f"Empty completion from {self._model} (finish_reason={choice.finish_reason!r})"
+            )
         try:
             parsed = response_model.model_validate_json(raw)
         except (ValidationError, ValueError, TypeError) as exc:
