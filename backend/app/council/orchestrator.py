@@ -3,6 +3,7 @@ run, then the 6 analyst roles per candidate. Every call is structured-JSON,
 pydantic-validated, and versioned (Section 26) -- failures are surfaced, not
 papered over (Section 50)."""
 
+import asyncio
 from dataclasses import dataclass
 
 from app.council.prompts import (
@@ -58,7 +59,6 @@ async def run_candidate_council(
     model_agreement/data_quality, not crash the candidate (Section 50)."""
 
     payload_base = {"evidence": evidence.model_dump(), "user_profile": user_profile, "plan": plan}
-    results: dict[str, RoleResult] = {}
 
     role_specs = [
         ("bull", BULL_SYSTEM, BullCaseOutput),
@@ -68,12 +68,21 @@ async def run_candidate_council(
         ("risk", RISK_SYSTEM, RiskAssessmentOutput),
     ]
 
-    for role, system_prompt, schema in role_specs:
+    async def _run_role(role: str, system_prompt: str, schema) -> RoleResult | None:
         try:
             result, meta = await llm.complete_structured(system_prompt, payload_base, schema, PROMPT_VERSION)
         except StructuredOutputError:
-            continue
-        results[role] = RoleResult(role, result.model_dump(), meta["model_name"], meta["model_version"], PROMPT_VERSION)
+            return None
+        return RoleResult(role, result.model_dump(), meta["model_name"], meta["model_version"], PROMPT_VERSION)
+
+    # The 5 analyst roles are independent of each other (same evidence/plan
+    # input, no shared state) -- run them concurrently instead of one giant
+    # LLM round-trip at a time. The judge below stays sequential: it needs
+    # all of their outputs as input.
+    role_outputs = await asyncio.gather(
+        *(_run_role(role, system_prompt, schema) for role, system_prompt, schema in role_specs)
+    )
+    results = {r.role: r for r in role_outputs if r is not None}
 
     judge_payload = {**payload_base, "analyst_outputs": {r: res.content for r, res in results.items()}}
     try:

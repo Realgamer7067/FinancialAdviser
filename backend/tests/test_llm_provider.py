@@ -37,6 +37,24 @@ async def test_empty_completion_content_raises_structured_output_error(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_none_choices_raises_structured_output_error(monkeypatch):
+    """A second live crash: OpenRouter returned HTTP 200 with a
+    provider-side error embedded in the body and `choices=None` (not just an
+    empty message) -- `response.choices[0]` isn't reachable at all in that
+    case, so the guard has to check `response.choices` itself first."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "qwen_api_key", "test-key")
+    provider = QwenOpenAICompatibleProvider()
+    broken_response = SimpleNamespace(choices=None)
+    with patch.object(
+        provider._client.chat.completions, "create", AsyncMock(return_value=broken_response)
+    ):
+        with pytest.raises(StructuredOutputError):
+            await provider.complete_structured("system", {}, _DummyOutput, "v1")
+
+
+@pytest.mark.asyncio
 async def test_valid_completion_content_still_parses(monkeypatch):
     from app.core.config import settings
 

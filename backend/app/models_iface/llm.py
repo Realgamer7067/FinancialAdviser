@@ -74,6 +74,13 @@ class QwenOpenAICompatibleProvider(LLMProvider):
             # (Section 50: a failed specialist shouldn't take down the run).
             raise StructuredOutputError(f"Qwen API call failed: {exc}") from exc
 
+        if not response.choices:
+            # Observed in practice: OpenRouter returning a 200 with a
+            # provider-side error embedded in the body and `choices=None`
+            # instead of raising -- the openai SDK doesn't treat that as an
+            # APIError since the HTTP status was 200.
+            raise StructuredOutputError(f"No choices returned from {self._model}")
+
         choice = response.choices[0]
         raw = choice.message.content
         if not raw:
