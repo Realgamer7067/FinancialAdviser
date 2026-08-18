@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import type { StockDetail } from "@/lib/types";
+import type { PriceHistoryOut, StockDetail } from "@/lib/types";
 import RequireAuth from "@/components/RequireAuth";
 import RecommendationBadge from "@/components/RecommendationBadge";
+import RiskTierBadge from "@/components/RiskTierBadge";
+import PriceHistoryChart from "@/components/charts/PriceHistoryChart";
+import ScoreBarChart, { type ScoreBarChartEntry } from "@/components/charts/ScoreBarChart";
 
 function fmtPct(v: number | null) {
   return v === null || v === undefined ? "UNKNOWN" : `${(v * 100).toFixed(1)}%`;
@@ -17,6 +20,7 @@ function fmtNum(v: number | null) {
 function StockDetailInner() {
   const params = useParams<{ symbol: string }>();
   const [stock, setStock] = useState<StockDetail | null>(null);
+  const [history, setHistory] = useState<PriceHistoryOut | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -25,12 +29,26 @@ function StockDetailInner() {
       .get<StockDetail>(`/api/stocks/${params.symbol}`)
       .then(setStock)
       .catch((err) => setError(err instanceof ApiError ? err.message : "Failed to load stock"));
+    api
+      .get<PriceHistoryOut>(`/api/stocks/${params.symbol}/history`)
+      .then(setHistory)
+      .catch(() => setHistory(null));
   }, [params.symbol]);
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!stock) return <p className="text-sm text-slate-500">Loading...</p>;
 
   const rec = stock.recommendation;
+  const scoreEntries: ScoreBarChartEntry[] = rec
+    ? [
+        { label: "Fundamental", value: rec.fundamental_score },
+        { label: "Technical", value: rec.technical_score },
+        { label: "Kronos", value: rec.kronos_score },
+        { label: "News", value: rec.news_score },
+        { label: "Portfolio", value: rec.portfolio_score },
+        { label: "Risk fit", value: rec.risk_score },
+      ].filter((e): e is ScoreBarChartEntry => e.value !== null)
+    : [];
 
   return (
     <div className="space-y-6">
@@ -42,7 +60,17 @@ function StockDetailInner() {
           </p>
           <p className="mt-1 text-lg">₹{stock.latest_price?.toFixed(2) ?? "UNKNOWN"}</p>
         </div>
-        {rec && <RecommendationBadge value={rec.recommendation} />}
+        {rec && (
+          <div className="flex flex-col items-end gap-1">
+            <RecommendationBadge value={rec.recommendation} />
+            <RiskTierBadge value={rec.risk_tier} />
+          </div>
+        )}
+      </div>
+
+      <div className="rounded border bg-white p-4">
+        <h3 className="mb-2 font-medium">Price history</h3>
+        <PriceHistoryChart points={history?.points ?? []} />
       </div>
 
       {rec ? (
@@ -52,6 +80,13 @@ function StockDetailInner() {
             <span>Risk: {rec.risk_level}</span>
             <span>Suggested horizon: {rec.suggested_horizon}</span>
           </div>
+
+          {scoreEntries.length > 0 && (
+            <div>
+              <h3 className="mb-2 font-medium">Score breakdown</h3>
+              <ScoreBarChart entries={scoreEntries} />
+            </div>
+          )}
 
           <div>
             <h3 className="font-medium">Why we like it</h3>
@@ -107,6 +142,7 @@ function StockDetailInner() {
                 <Row label="RSI (14)" value={fmtNum(stock.technicals.rsi_14)} />
                 <Row label="30d volatility" value={fmtPct(stock.technicals.volatility_30d)} />
                 <Row label="1y drawdown" value={fmtPct(stock.technicals.drawdown_1y)} />
+                <Row label="Beta (vs NIFTY50)" value={fmtNum(stock.technicals.beta)} />
               </dl>
             ) : (
               <p className="text-sm text-slate-400">UNKNOWN</p>

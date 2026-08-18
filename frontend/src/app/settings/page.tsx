@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { RiskProfile } from "@/lib/types";
 import RequireAuth from "@/components/RequireAuth";
+import RiskGauge from "@/components/ui/RiskGauge";
 
 function SettingsInner() {
   const [profile, setProfile] = useState<RiskProfile | null>(null);
@@ -25,9 +26,13 @@ function SettingsInner() {
         <h2 className="mb-2 font-medium">Investor profile</h2>
         {error && <p className="text-sm text-slate-500">{error}</p>}
         {profile && (
+          <div className="mb-4">
+            <RiskGauge value={profile.risk_score} label={profile.risk_profile} />
+          </div>
+        )}
+        {profile && (
           <dl className="space-y-1 text-sm">
             <Row label="Risk profile" value={profile.risk_profile} />
-            <Row label="Risk score" value={`${profile.risk_score}/100`} />
             <Row label="Horizon" value={`${profile.investment_horizon_years} years`} />
             <Row label="Capital" value={`₹${profile.capital.toLocaleString("en-IN")}`} />
             <Row label="Monthly contribution" value={`₹${profile.monthly_contribution.toLocaleString("en-IN")}`} />

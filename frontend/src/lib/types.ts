@@ -16,11 +16,18 @@ export interface RecommendationCard {
   confidence: number;
   score: number;
   risk_level: string;
+  risk_tier: "safer" | "moderate" | "risky" | "riskiest" | null;
   suggested_horizon: string;
   strengths: string[];
   risks: string[];
   rationale: string;
   evidence: Record<string, unknown>;
+  fundamental_score: number | null;
+  technical_score: number | null;
+  kronos_score: number | null;
+  news_score: number | null;
+  portfolio_score: number | null;
+  risk_score: number | null;
   model_agreement: number;
   data_quality: number;
   generated_at: string;
@@ -79,6 +86,7 @@ export interface StockDetail {
     volatility_30d: number | null;
     drawdown_1y: number | null;
     macd_hist: number | null;
+    beta: number | null;
     computed_at: string;
   } | null;
   kronos: {
@@ -105,4 +113,33 @@ export interface PortfolioOut {
   expected_volatility: number | null;
   sharpe: number | null;
   notes: string[];
+}
+
+export interface PriceHistoryPoint {
+  timestamp: string;
+  close: number;
+}
+
+export interface PriceHistoryOut {
+  symbol: string;
+  interval: string;
+  points: PriceHistoryPoint[];
+}
+
+export interface SaferAlternative {
+  key: string;
+  name: string;
+  category: string;
+  description: string;
+  indicative_return_range: string;
+  liquidity: string;
+  typical_lock_in: string | null;
+  risk_note: string;
+  suited_risk_profiles: string[];
+  eligibility_note: string | null;
+}
+
+export interface SaferAlternativesOut {
+  disclaimer: string;
+  items: SaferAlternative[];
 }

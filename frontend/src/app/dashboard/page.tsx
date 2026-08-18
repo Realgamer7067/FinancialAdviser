@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { DashboardOut, JobStatus } from "@/lib/types";
 import RequireAuth from "@/components/RequireAuth";
+import StatCard from "@/components/ui/StatCard";
 
 function DashboardInner() {
   const [data, setData] = useState<DashboardOut | null>(null);
@@ -68,6 +69,15 @@ function DashboardInner() {
         </div>
       )}
 
+      {(data.risk_profile === "conservative" || data.risk_profile === "moderate") && (
+        <div className="rounded border bg-white p-4 text-sm">
+          Prefer lower-risk options?{" "}
+          <Link href="/safer-alternatives" className="text-brand-700 underline">
+            See safer alternatives →
+          </Link>
+        </div>
+      )}
+
       <div className="rounded border bg-white p-4">
         <h2 className="font-medium">Opportunities</h2>
         <p className="mt-1 text-sm text-slate-600">
@@ -91,16 +101,6 @@ function DashboardInner() {
           {job?.status === "failed" && <span className="text-sm text-red-600">Analysis failed: {job.error}</span>}
         </div>
       </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="rounded border bg-white p-4">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold capitalize">{value}</p>
-      {hint && <p className="text-xs text-slate-400">{hint}</p>}
     </div>
   );
 }

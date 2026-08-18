@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { RiskProfile } from "@/lib/types";
+import RiskGauge from "@/components/ui/RiskGauge";
+import Button from "@/components/ui/Button";
 
 const RADIO_GROUP = "block space-y-1 text-sm";
 
@@ -53,16 +55,11 @@ export default function OnboardingPage() {
     return (
       <div className="mx-auto max-w-md space-y-4 rounded border bg-white p-6">
         <h1 className="text-lg font-semibold">Your investor profile is ready</h1>
-        <p className="text-sm text-slate-600">
-          Risk profile: <strong className="capitalize">{result.risk_profile}</strong> (score {result.risk_score}/100)
-        </p>
+        <RiskGauge value={result.risk_score} label={result.risk_profile} />
         <p className="text-sm text-slate-600">Horizon: {result.investment_horizon_years} years</p>
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="w-full rounded bg-brand-600 px-4 py-2 text-white hover:bg-brand-700"
-        >
+        <Button onClick={() => router.push("/dashboard")} className="w-full">
           Go to dashboard
-        </button>
+        </Button>
       </div>
     );
   }
@@ -201,12 +198,9 @@ export default function OnboardingPage() {
       </fieldset>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button
-        disabled={loading}
-        className="w-full rounded bg-brand-600 px-4 py-2 text-white hover:bg-brand-700 disabled:opacity-50"
-      >
+      <Button disabled={loading} className="w-full">
         {loading ? "Computing your risk profile..." : "Submit"}
-      </button>
+      </Button>
     </form>
   );
 }

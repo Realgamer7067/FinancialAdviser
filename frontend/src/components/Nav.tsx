@@ -9,6 +9,7 @@ const links = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/recommendations", label: "Recommendations" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/safer-alternatives", label: "Safer Options" },
   { href: "/settings", label: "Settings" },
 ];
 
@@ -18,9 +19,15 @@ export default function Nav() {
   // sync after mount -- avoids a hydration mismatch (Section 71 note: this
   // is a UI concern, not a data-integrity one).
   const [loggedIn, setLoggedIn] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => {
     setLoggedIn(!!getToken());
   }, []);
+
+  function logout() {
+    clearToken();
+    router.push("/");
+  }
 
   return (
     <nav className="border-b bg-white">
@@ -29,24 +36,44 @@ export default function Nav() {
           Indian Equity Research
         </Link>
         {loggedIn && (
-          <div className="flex items-center gap-4 text-sm">
-            {links.map((l) => (
-              <Link key={l.href} href={l.href} className="text-slate-600 hover:text-brand-700">
-                {l.label}
-              </Link>
-            ))}
+          <>
+            <div className="hidden items-center gap-4 text-sm sm:flex">
+              {links.map((l) => (
+                <Link key={l.href} href={l.href} className="text-slate-600 hover:text-brand-700">
+                  {l.label}
+                </Link>
+              ))}
+              <button onClick={logout} className="text-slate-400 hover:text-red-600">
+                Log out
+              </button>
+            </div>
             <button
-              onClick={() => {
-                clearToken();
-                router.push("/");
-              }}
-              className="text-slate-400 hover:text-red-600"
+              onClick={() => setMobileOpen((o) => !o)}
+              aria-label="Toggle menu"
+              className="rounded border px-2 py-1 text-slate-600 sm:hidden"
             >
-              Log out
+              {mobileOpen ? "✕" : "☰"}
             </button>
-          </div>
+          </>
         )}
       </div>
+      {loggedIn && mobileOpen && (
+        <div className="flex flex-col gap-2 border-t bg-white px-4 py-3 text-sm sm:hidden">
+          {links.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="text-slate-600 hover:text-brand-700"
+              onClick={() => setMobileOpen(false)}
+            >
+              {l.label}
+            </Link>
+          ))}
+          <button onClick={logout} className="text-left text-slate-400 hover:text-red-600">
+            Log out
+          </button>
+        </div>
+      )}
     </nav>
   );
 }
