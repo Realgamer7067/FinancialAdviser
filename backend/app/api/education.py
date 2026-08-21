@@ -2,12 +2,10 @@
 content only -- never a personalized recommendation or a live quote (see
 app/education/safer_alternatives.py's module docstring)."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.api.deps import get_current_user
 from app.education.safer_alternatives import get_safer_alternatives
-from app.models.user import User
 
 router = APIRouter(prefix="/api/education", tags=["education"])
 
@@ -38,7 +36,7 @@ _DISCLAIMER = (
 
 
 @router.get("/safer-alternatives", response_model=SaferAlternativesOut)
-async def safer_alternatives(user: User = Depends(get_current_user)):
+async def safer_alternatives():
     items = [
         SaferAlternativeOut(
             key=a.key,

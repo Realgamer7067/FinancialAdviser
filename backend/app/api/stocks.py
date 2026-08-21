@@ -6,17 +6,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
 from app.core.db import get_db
+from app.core.single_user import SINGLE_USER_ID
 from app.models.analysis import FinbertAnalysis, KronosPrediction, TechnicalFeatures
 from app.models.fundamentals import FundamentalMetrics
 from app.models.market import Instrument, MarketCandle
+from app.models.news import NewsAnalysis, NewsItem
 from app.models.recommendation import Recommendation
-from app.models.user import User
 from app.schemas.recommendation import RecommendationCard
 from app.schemas.stock import (
     FundamentalsOut,
     KronosOut,
+    NewsArticleOut,
+    NewsArticlesOut,
     NewsOut,
     PriceHistoryOut,
     PriceHistoryPoint,
@@ -28,7 +30,7 @@ router = APIRouter(prefix="/api/stocks", tags=["stocks"])
 
 
 @router.get("/{symbol}", response_model=StockDetail)
-async def get_stock_detail(symbol: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def get_stock_detail(symbol: str, db: AsyncSession = Depends(get_db)):
     instrument = (await db.execute(select(Instrument).where(Instrument.symbol == symbol))).scalar_one_or_none()
     if instrument is None:
         raise HTTPException(status_code=404, detail="Unknown symbol")
@@ -81,7 +83,7 @@ async def get_stock_detail(symbol: str, db: AsyncSession = Depends(get_db), user
     recommendation = (
         await db.execute(
             select(Recommendation)
-            .where(Recommendation.instrument_id == instrument.id, Recommendation.user_id == user.id)
+            .where(Recommendation.instrument_id == instrument.id, Recommendation.user_id == SINGLE_USER_ID)
             .order_by(Recommendation.generated_at.desc())
             .limit(1)
         )
@@ -173,9 +175,7 @@ async def get_stock_detail(symbol: str, db: AsyncSession = Depends(get_db), user
 
 
 @router.get("/{symbol}/history", response_model=PriceHistoryOut)
-async def get_stock_history(
-    symbol: str, days: int = 180, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
-):
+async def get_stock_history(symbol: str, days: int = 180, db: AsyncSession = Depends(get_db)):
     days = max(1, min(days, 365))
     instrument = (await db.execute(select(Instrument).where(Instrument.symbol == symbol))).scalar_one_or_none()
     if instrument is None:
@@ -198,4 +198,45 @@ async def get_stock_history(
         symbol=symbol,
         interval="1d",
         points=[PriceHistoryPoint(timestamp=r.timestamp, close=r.close) for r in rows],
+    )
+
+
+@router.get("/{symbol}/news", response_model=NewsArticlesOut)
+async def get_stock_news(symbol: str, days: int = 30, db: AsyncSession = Depends(get_db)):
+    """Raw ingested articles tagged to this symbol -- the aggregate sentiment
+    on StockDetail.news is a summary of exactly these. Filtered in Python
+    (`symbol in item.companies`), same as the pipeline's own
+    _aggregate_news_sentiment -- NewsItem.companies is a JSON array, not
+    portably queryable with SQL containment across the SQLite-in-tests /
+    Postgres-in-prod split this repo relies on."""
+    days = max(1, min(days, 365))
+    instrument = (await db.execute(select(Instrument).where(Instrument.symbol == symbol))).scalar_one_or_none()
+    if instrument is None:
+        raise HTTPException(status_code=404, detail="Unknown symbol")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        await db.execute(
+            select(NewsAnalysis, NewsItem)
+            .join(NewsItem, NewsAnalysis.news_id == NewsItem.id)
+            .where(NewsItem.published_at >= cutoff)
+            .order_by(NewsItem.published_at.desc())
+        )
+    ).all()
+    matching = [(a, n) for a, n in rows if symbol in n.companies][:50]
+
+    return NewsArticlesOut(
+        symbol=symbol,
+        articles=[
+            NewsArticleOut(
+                title=n.title,
+                url=n.url,
+                source=n.source,
+                published_at=n.published_at,
+                sentiment=a.sentiment,
+                event_type=a.event_type,
+                confidence=a.confidence,
+            )
+            for a, n in matching
+        ],
     )

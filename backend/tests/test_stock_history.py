@@ -5,14 +5,6 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.market import Instrument, MarketCandle
 
-SIGNUP_PAYLOAD = {"email": "history@example.com", "password": "correct-password-123", "full_name": "History Test"}
-
-
-async def _auth_headers(client):
-    res = await client.post("/api/auth/signup", json=SIGNUP_PAYLOAD)
-    token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
 
 async def _seed_candles(db_session, symbol="TESTCO", days=10):
     instrument = Instrument(symbol=symbol, exchange="NSE", name="Test Co")
@@ -41,9 +33,8 @@ async def _seed_candles(db_session, symbol="TESTCO", days=10):
 
 async def test_history_returns_points_in_ascending_order(client, db_session):
     await _seed_candles(db_session, symbol="TESTCO", days=5)
-    headers = await _auth_headers(client)
 
-    res = await client.get("/api/stocks/TESTCO/history", headers=headers)
+    res = await client.get("/api/stocks/TESTCO/history")
     assert res.status_code == 200
     body = res.json()
     assert body["symbol"] == "TESTCO"
@@ -55,14 +46,12 @@ async def test_history_returns_points_in_ascending_order(client, db_session):
 
 async def test_history_days_param_clamps_to_valid_range(client, db_session):
     await _seed_candles(db_session, symbol="TESTCO2", days=3)
-    headers = await _auth_headers(client)
 
-    res = await client.get("/api/stocks/TESTCO2/history?days=999999", headers=headers)
+    res = await client.get("/api/stocks/TESTCO2/history?days=999999")
     assert res.status_code == 200
     assert len(res.json()["points"]) == 3
 
 
 async def test_history_unknown_symbol_404s(client):
-    headers = await _auth_headers(client)
-    res = await client.get("/api/stocks/NOPE/history", headers=headers)
+    res = await client.get("/api/stocks/NOPE/history")
     assert res.status_code == 404

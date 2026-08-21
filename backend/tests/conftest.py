@@ -9,21 +9,10 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.api import auth as auth_module
 from app.core import db as db_module
 from app.core.config import settings
 from app.core.db import Base
 from app.main import app
-
-
-@pytest.fixture(autouse=True)
-def _reset_auth_rate_limiter():
-    # Module-level state in app/api/auth.py -- would otherwise leak between
-    # tests (e.g. a rate-limit test exhausting the counter and breaking every
-    # login/signup test that runs after it in the same process).
-    auth_module._attempts.clear()
-    yield
-    auth_module._attempts.clear()
 
 
 @pytest.fixture(autouse=True)

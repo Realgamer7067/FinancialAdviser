@@ -3,24 +3,25 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import type { PriceHistoryOut, StockDetail } from "@/lib/types";
-import RequireAuth from "@/components/RequireAuth";
+import type { NewsArticlesOut, PriceHistoryOut, StockDetail } from "@/lib/types";
+import { fmtNum, fmtPct } from "@/lib/format";
 import RecommendationBadge from "@/components/RecommendationBadge";
 import RiskTierBadge from "@/components/RiskTierBadge";
 import PriceHistoryChart from "@/components/charts/PriceHistoryChart";
 import ScoreBarChart, { type ScoreBarChartEntry } from "@/components/charts/ScoreBarChart";
+import { Panel, Row } from "@/components/ui/Panel";
 
-function fmtPct(v: number | null) {
-  return v === null || v === undefined ? "UNKNOWN" : `${(v * 100).toFixed(1)}%`;
-}
-function fmtNum(v: number | null) {
-  return v === null || v === undefined ? "UNKNOWN" : v.toFixed(2);
+function sentimentColor(s: number): string {
+  if (s > 0.1) return "bg-green-500";
+  if (s < -0.1) return "bg-red-500";
+  return "bg-slate-400";
 }
 
 function StockDetailInner() {
   const params = useParams<{ symbol: string }>();
   const [stock, setStock] = useState<StockDetail | null>(null);
   const [history, setHistory] = useState<PriceHistoryOut | null>(null);
+  const [news, setNews] = useState<NewsArticlesOut | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -33,6 +34,10 @@ function StockDetailInner() {
       .get<PriceHistoryOut>(`/api/stocks/${params.symbol}/history`)
       .then(setHistory)
       .catch(() => setHistory(null));
+    api
+      .get<NewsArticlesOut>(`/api/stocks/${params.symbol}/news`)
+      .then(setNews)
+      .catch(() => setNews(null));
   }, [params.symbol]);
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
@@ -114,6 +119,37 @@ function StockDetailInner() {
         <p className="text-sm text-slate-500">No recommendation generated for this stock yet.</p>
       )}
 
+      <div className="rounded border bg-white p-4">
+        <h3 className="mb-2 font-medium">News</h3>
+        {stock.news && (
+          <dl className="mb-3 space-y-1 text-sm">
+            <Row label="Sentiment" value={stock.news.sentiment_score.toFixed(2)} />
+            <Row label="Confidence" value={fmtPct(stock.news.confidence)} />
+            <Row label="Articles (14d)" value={String(stock.news.article_count)} />
+          </dl>
+        )}
+        {news && news.articles.length > 0 ? (
+          <ul className="space-y-3">
+            {news.articles.map((a) => (
+              <li key={a.url} className="flex items-start gap-2 border-t pt-2 first:border-t-0 first:pt-0">
+                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${sentimentColor(a.sentiment)}`} />
+                <div className="min-w-0">
+                  <a href={a.url} target="_blank" rel="noreferrer" className="text-sm font-medium text-brand-700 hover:underline">
+                    {a.title}
+                  </a>
+                  <p className="text-xs text-slate-500">
+                    {a.source} · {new Date(a.published_at).toLocaleDateString("en-IN", { month: "short", day: "numeric" })} ·{" "}
+                    <span className="capitalize">{a.event_type}</span>
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-slate-400">No recent articles matched to this stock.</p>
+        )}
+      </div>
+
       <button onClick={() => setShowAdvanced((s) => !s)} className="text-sm text-brand-700 underline">
         {showAdvanced ? "Hide" : "Show"} advanced analysis
       </button>
@@ -161,46 +197,12 @@ function StockDetailInner() {
               <p className="text-sm text-slate-400">No forecast available.</p>
             )}
           </Panel>
-
-          <Panel title="News sentiment">
-            {stock.news ? (
-              <dl className="space-y-1 text-sm">
-                <Row label="Sentiment" value={stock.news.sentiment_score.toFixed(2)} />
-                <Row label="Confidence" value={fmtPct(stock.news.confidence)} />
-                <Row label="Articles (14d)" value={String(stock.news.article_count)} />
-              </dl>
-            ) : (
-              <p className="text-sm text-slate-400">No recent news matched.</p>
-            )}
-          </Panel>
         </div>
       )}
     </div>
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded border bg-white p-4">
-      <h3 className="mb-2 font-medium">{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="font-medium">{value}</dd>
-    </div>
-  );
-}
-
 export default function StockDetailPage() {
-  return (
-    <RequireAuth>
-      <StockDetailInner />
-    </RequireAuth>
-  );
+  return <StockDetailInner />;
 }

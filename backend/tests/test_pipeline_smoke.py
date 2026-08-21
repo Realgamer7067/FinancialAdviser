@@ -23,7 +23,6 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy import select
 
-from app.core.security import hash_password
 from app.models.recommendation import Recommendation
 from app.models.user import RiskProfile, User, UserProfile
 from app.pipelines import recommendation_pipeline as pipeline_module
@@ -71,7 +70,7 @@ async def test_pipeline_runs_end_to_end_without_network(db_session, monkeypatch)
     monkeypatch.setattr(pipeline_module, "RSSNewsProvider", lambda: _FakeNewsProvider())
     monkeypatch.setattr(pipeline_module, "KronosModel", lambda: _FakeKronosModel())
 
-    user = User(email="smoke@example.com", hashed_password=hash_password("x"), full_name="Smoke Test")
+    user = User(email="smoke@example.com", hashed_password="unused-single-user-mode", full_name="Smoke Test")
     db_session.add(user)
     await db_session.flush()
 

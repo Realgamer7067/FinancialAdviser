@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { RiskProfile } from "@/lib/types";
-import RequireAuth from "@/components/RequireAuth";
 import RiskGauge from "@/components/ui/RiskGauge";
 
 function SettingsInner() {
@@ -58,9 +57,5 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 export default function SettingsPage() {
-  return (
-    <RequireAuth>
-      <SettingsInner />
-    </RequireAuth>
-  );
+  return <SettingsInner />;
 }

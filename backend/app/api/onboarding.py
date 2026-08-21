@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
 from app.core.db import get_db
-from app.models.user import RiskProfile, User, UserProfile
+from app.core.single_user import SINGLE_USER_ID
+from app.models.user import RiskProfile, UserProfile
 from app.risk.scoring import compute_risk_profile
 from app.schemas.onboarding import OnboardingRequest, RiskProfileResponse
 
@@ -16,20 +16,18 @@ router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
 
 @router.post("", response_model=RiskProfileResponse, status_code=201)
-async def submit_onboarding(
-    payload: OnboardingRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
-):
+async def submit_onboarding(payload: OnboardingRequest, db: AsyncSession = Depends(get_db)):
     try:
         scored = compute_risk_profile(payload.raw_risk_answers, payload.investment_horizon_years)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     prior_count = (
-        await db.execute(select(UserProfile).where(UserProfile.user_id == user.id))
+        await db.execute(select(UserProfile).where(UserProfile.user_id == SINGLE_USER_ID))
     ).scalars().all()
 
     profile = UserProfile(
-        user_id=user.id,
+        user_id=SINGLE_USER_ID,
         version=len(prior_count) + 1,
         age=payload.age,
         employment_status=payload.employment_status,
@@ -74,10 +72,10 @@ async def submit_onboarding(
 
 
 @router.get("/me", response_model=RiskProfileResponse)
-async def get_my_risk_profile(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def get_my_risk_profile(db: AsyncSession = Depends(get_db)):
     profile = (
         await db.execute(
-            select(UserProfile).where(UserProfile.user_id == user.id).order_by(UserProfile.created_at.desc())
+            select(UserProfile).where(UserProfile.user_id == SINGLE_USER_ID).order_by(UserProfile.created_at.desc())
         )
     ).scalars().first()
     if profile is None:

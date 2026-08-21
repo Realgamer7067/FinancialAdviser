@@ -109,10 +109,63 @@ export interface StockDetail {
 export interface PortfolioOut {
   method: string;
   allocations: Record<string, number>;
+  sectors: Record<string, string | null>;
   expected_return: number | null;
   expected_volatility: number | null;
   sharpe: number | null;
   notes: string[];
+}
+
+export interface StockAllocation {
+  symbol: string;
+  weight: number;
+  rupee_amount: number;
+  last_price: number | null;
+  shares: number | null;
+}
+
+export interface AllocateOut {
+  amount: number;
+  total_allocated: number;
+  cash_remainder: number;
+  allocations: StockAllocation[];
+}
+
+export interface SipProjectionPoint {
+  year: number;
+  invested_cumulative: number;
+  projected_value: number;
+}
+
+export interface SipProjectionOut {
+  monthly_amount: number;
+  years: number;
+  annual_rate_pct: number;
+  assumed_return: boolean;
+  points: SipProjectionPoint[];
+}
+
+export interface GoalSipOut {
+  target_amount: number;
+  years: number;
+  annual_rate_pct: number;
+  assumed_return: boolean;
+  required_monthly_sip: number;
+}
+
+export interface NewsArticle {
+  title: string;
+  url: string;
+  source: string;
+  published_at: string;
+  sentiment: number;
+  event_type: string;
+  confidence: number;
+}
+
+export interface NewsArticlesOut {
+  symbol: string;
+  articles: NewsArticle[];
 }
 
 export interface PriceHistoryPoint {

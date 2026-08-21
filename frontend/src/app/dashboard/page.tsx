@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { DashboardOut, JobStatus } from "@/lib/types";
-import RequireAuth from "@/components/RequireAuth";
 import StatCard from "@/components/ui/StatCard";
 
 function DashboardInner() {
@@ -106,9 +105,5 @@ function DashboardInner() {
 }
 
 export default function DashboardPage() {
-  return (
-    <RequireAuth>
-      <DashboardInner />
-    </RequireAuth>
-  );
+  return <DashboardInner />;
 }

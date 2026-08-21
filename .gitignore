@@ -14,8 +14,15 @@ data/processed/*
 node_modules/
 frontend/.next/
 frontend/out/
+*.tsbuildinfo
 *.log
 .DS_Store
 .pytest_cache/
 *.egg-info/
 .env.example.save
+
+# TrueData: NDA-covered docs + any cached/derived TrueData data. Never push.
+.TD_API_Docs/
+data/truedata_raw/
+*truedata*.csv
+*truedata*.json

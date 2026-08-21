@@ -59,11 +59,23 @@ from app.services.market_regime import detect_market_regime
 from app.services.technical_analysis import compute_technical_features
 
 RISK_FREE_RATE = 0.07  # approx. Indian 10Y G-Sec yield proxy -- review periodically, not live data
-MAX_SINGLE_WEIGHT = 0.25
+MAX_SINGLE_WEIGHT = 0.25  # fallback when risk_profile is unknown -- see _max_single_weight_for
+MAX_SINGLE_WEIGHT_BY_RISK_PROFILE = {
+    "conservative": 0.15,
+    "moderate": 0.25,
+    "aggressive": 0.35,
+}
 HISTORY_DAYS = 400
 NEWS_WINDOW_DAYS = 14
 INTER_SYMBOL_DELAY_SECONDS = 0.2  # burst-rate headroom against yfinance's undocumented limits
 CANDLE_STALENESS_TOLERANCE_DAYS = 3  # weekend/holiday gaps don't force a refetch
+
+
+def _max_single_weight_for(risk_profile_label: str | None) -> float:
+    """Conservative users get a tighter per-stock concentration cap than
+    aggressive ones -- makes the "risk-balanced" allocation real instead of
+    a single global constant applied to everyone (Part 2 of the beyond-MVP plan)."""
+    return MAX_SINGLE_WEIGHT_BY_RISK_PROFILE.get(risk_profile_label, MAX_SINGLE_WEIGHT)
 
 
 class PipelineError(Exception):
@@ -546,10 +558,12 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
         returns = [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes))]
         candidate_returns[symbol] = returns
 
+    max_single_weight = _max_single_weight_for(risk_profile.risk_profile)
+
     portfolio_result = None
     if candidate_returns:
         try:
-            allocation = await portfolio_model.optimize(candidate_returns, RISK_FREE_RATE, MAX_SINGLE_WEIGHT)
+            allocation = await portfolio_model.optimize(candidate_returns, RISK_FREE_RATE, max_single_weight)
             portfolio_result = PortfolioResult(
                 user_id=user_id,
                 method=allocation.method,
@@ -725,7 +739,7 @@ async def _evaluate_candidate(
         "technical": calc_technical_score(technical_ev),
         "kronos": calc_kronos_score(kronos_ev),
         "news": calc_news_score(news_ev),
-        "portfolio": calc_portfolio_score(portfolio_ev, MAX_SINGLE_WEIGHT),
+        "portfolio": calc_portfolio_score(portfolio_ev, _max_single_weight_for(risk_profile_label)),
         "risk": calc_risk_fit_score(risk_profile_label, technical_ev),
     }
     breakdown = compute_final_score(

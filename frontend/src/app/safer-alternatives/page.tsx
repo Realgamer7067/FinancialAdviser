@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { RiskProfile, SaferAlternativesOut } from "@/lib/types";
-import RequireAuth from "@/components/RequireAuth";
 import Card from "@/components/ui/Card";
 
 function SaferAlternativesInner() {
@@ -83,9 +82,5 @@ function SaferAlternativesInner() {
 }
 
 export default function SaferAlternativesPage() {
-  return (
-    <RequireAuth>
-      <SaferAlternativesInner />
-    </RequireAuth>
-  );
+  return <SaferAlternativesInner />;
 }

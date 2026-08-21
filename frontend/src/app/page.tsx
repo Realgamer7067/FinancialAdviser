@@ -15,11 +15,8 @@ export default function LandingPage() {
           profile, and the research runs invisibly in the background.
         </p>
         <div className="flex gap-3">
-          <Link href="/signup" className="rounded bg-brand-600 px-4 py-2 text-white hover:bg-brand-700">
+          <Link href="/onboarding" className="rounded bg-brand-600 px-4 py-2 text-white hover:bg-brand-700">
             Get started
-          </Link>
-          <Link href="/login" className="rounded border px-4 py-2 text-slate-700 hover:bg-slate-100">
-            Log in
           </Link>
         </div>
       </section>

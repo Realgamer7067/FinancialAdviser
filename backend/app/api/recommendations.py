@@ -7,12 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
 from app.core.db import get_db
+from app.core.single_user import SINGLE_USER_ID
 from app.models.council import CouncilRun
 from app.models.market import Instrument
 from app.models.recommendation import Recommendation
-from app.models.user import User
 from app.schemas.recommendation import CouncilRunSummary, RecommendationCard
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
@@ -70,10 +69,10 @@ async def _build_summary(db: AsyncSession, council_run: CouncilRun) -> CouncilRu
 
 
 @router.get("/latest", response_model=CouncilRunSummary)
-async def latest_recommendations(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def latest_recommendations(db: AsyncSession = Depends(get_db)):
     council_run = (
         await db.execute(
-            select(CouncilRun).where(CouncilRun.user_id == user.id).order_by(CouncilRun.started_at.desc())
+            select(CouncilRun).where(CouncilRun.user_id == SINGLE_USER_ID).order_by(CouncilRun.started_at.desc())
         )
     ).scalars().first()
     if council_run is None:
@@ -82,10 +81,8 @@ async def latest_recommendations(db: AsyncSession = Depends(get_db), user: User 
 
 
 @router.get("/{council_run_id}", response_model=CouncilRunSummary)
-async def get_recommendations(
-    council_run_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
-):
+async def get_recommendations(council_run_id: UUID, db: AsyncSession = Depends(get_db)):
     council_run = await db.get(CouncilRun, council_run_id)
-    if council_run is None or council_run.user_id != user.id:
+    if council_run is None or council_run.user_id != SINGLE_USER_ID:
         raise HTTPException(status_code=404, detail="Recommendation run not found")
     return await _build_summary(db, council_run)

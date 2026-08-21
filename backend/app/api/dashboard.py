@@ -6,11 +6,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
 from app.core.db import get_db
+from app.core.single_user import SINGLE_USER_ID
 from app.models.council import CouncilRun
 from app.models.recommendation import Recommendation
-from app.models.user import RiskProfile, User, UserProfile
+from app.models.user import RiskProfile, UserProfile
 from app.providers.factory import get_market_data_provider
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -28,7 +28,7 @@ class DashboardOut(BaseModel):
 
 
 @router.get("", response_model=DashboardOut)
-async def get_dashboard(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def get_dashboard(db: AsyncSession = Depends(get_db)):
     provider = await get_market_data_provider()
     try:
         status = await provider.get_market_status("NSE")
@@ -48,7 +48,7 @@ async def get_dashboard(db: AsyncSession = Depends(get_db), user: User = Depends
 
     profile = (
         await db.execute(
-            select(UserProfile).where(UserProfile.user_id == user.id).order_by(UserProfile.created_at.desc())
+            select(UserProfile).where(UserProfile.user_id == SINGLE_USER_ID).order_by(UserProfile.created_at.desc())
         )
     ).scalars().first()
 
@@ -62,7 +62,9 @@ async def get_dashboard(db: AsyncSession = Depends(get_db), user: User = Depends
         risk_label = risk.risk_profile if risk else None
 
     latest_run = (
-        await db.execute(select(CouncilRun).where(CouncilRun.user_id == user.id).order_by(CouncilRun.started_at.desc()))
+        await db.execute(
+            select(CouncilRun).where(CouncilRun.user_id == SINGLE_USER_ID).order_by(CouncilRun.started_at.desc())
+        )
     ).scalars().first()
 
     top_count = 0

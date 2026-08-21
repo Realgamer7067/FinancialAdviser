@@ -54,6 +54,21 @@ class StockDetail(BaseModel):
     recommendation: RecommendationCard | None
 
 
+class NewsArticleOut(BaseModel):
+    title: str
+    url: str
+    source: str
+    published_at: datetime
+    sentiment: float
+    event_type: str
+    confidence: float
+
+
+class NewsArticlesOut(BaseModel):
+    symbol: str
+    articles: list[NewsArticleOut]
+
+
 class PriceHistoryPoint(BaseModel):
     timestamp: datetime
     close: float

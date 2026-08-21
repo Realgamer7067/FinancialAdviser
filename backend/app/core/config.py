@@ -2,10 +2,7 @@ import os
 from pathlib import Path
 
 import yaml
-from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-_DEFAULT_SECRET_KEY = "change-me-in-production"
 
 # parents[3] resolves correctly for local dev (repo_root/backend/app/core/config.py)
 # but NOT inside the container, where the backend's own directory is mounted at
@@ -22,19 +19,7 @@ class Settings(BaseSettings):
 
     demo_mode: bool = True
     environment: str = "development"
-    secret_key: str = _DEFAULT_SECRET_KEY
     timezone: str = "Asia/Kolkata"
-
-    @model_validator(mode="after")
-    def _forbid_default_secret_outside_dev(self) -> "Settings":
-        # A forgeable, publicly-known JWT signing key is a full auth bypass --
-        # fail startup loudly rather than silently accept it anywhere but local dev.
-        if self.secret_key == _DEFAULT_SECRET_KEY and self.environment != "development":
-            raise ValueError(
-                "SECRET_KEY is still the default placeholder outside a development "
-                "environment -- set a real secret via the SECRET_KEY env var."
-            )
-        return self
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/equity_research"
     sync_database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/equity_research"
@@ -54,6 +39,14 @@ class Settings(BaseSettings):
 
     worker_poll_interval_seconds: int = 5
     fundamentals_cache_ttl_hours: int = 24
+
+    # TrueData (NSE/BSE/MCX data vendor) -- used only by
+    # scripts/sync_truedata_history.py for a one-time historical cache pull
+    # during a trial window, never by the live pipeline. Credentials only,
+    # never the data itself, belong in .env -- see .TD_API_Docs/ (gitignored,
+    # NDA-covered) for the API docs this script implements against.
+    truedata_username: str = ""
+    truedata_password: str = ""
 
     @property
     def qwen_configured(self) -> bool:

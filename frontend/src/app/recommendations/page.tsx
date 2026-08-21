@@ -5,7 +5,6 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { CouncilRunSummary, RiskProfile } from "@/lib/types";
 import { tierFitsProfile } from "@/lib/riskTiers";
-import RequireAuth from "@/components/RequireAuth";
 import RecommendationBadge from "@/components/RecommendationBadge";
 import RiskTierBadge from "@/components/RiskTierBadge";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -103,9 +102,5 @@ function RecommendationsInner() {
 }
 
 export default function RecommendationsPage() {
-  return (
-    <RequireAuth>
-      <RecommendationsInner />
-    </RequireAuth>
-  );
+  return <RecommendationsInner />;
 }
