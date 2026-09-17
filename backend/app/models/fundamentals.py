@@ -39,6 +39,10 @@ class FundamentalMetrics(Base, UUIDPKMixin):
     pb: Mapped[float | None] = mapped_column(Float, nullable=True)
     ev_ebitda: Mapped[float | None] = mapped_column(Float, nullable=True)
     dividend_yield: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # See app/providers/base.py::FundamentalSnapshot for why these are two
+    # separate fields, not one -- different metrics from different disclosure
+    # regimes (docs/V2-RETHINK.md P1).
+    insider_holding_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     promoter_holding: Mapped[float | None] = mapped_column(Float, nullable=True)
     promoter_pledging: Mapped[float | None] = mapped_column(Float, nullable=True)
     institutional_ownership: Mapped[float | None] = mapped_column(Float, nullable=True)

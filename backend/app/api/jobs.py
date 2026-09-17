@@ -18,8 +18,23 @@ router = APIRouter(prefix="/api/recommendations/jobs", tags=["jobs"])
 class JobStatusResponse(BaseModel):
     id: UUID
     status: str
+    stage: str | None
+    progress_pct: float | None
+    stage_detail: dict | None
     error: str | None
     result_council_run_id: UUID | None
+
+
+def _to_response(job: RecommendationJob) -> JobStatusResponse:
+    return JobStatusResponse(
+        id=job.id,
+        status=job.status,
+        stage=job.stage,
+        progress_pct=job.progress_pct,
+        stage_detail=job.stage_detail,
+        error=job.error,
+        result_council_run_id=job.result_council_run_id,
+    )
 
 
 @router.post("", status_code=202, response_model=JobStatusResponse)
@@ -28,7 +43,7 @@ async def create_job(db: AsyncSession = Depends(get_db)):
     db.add(job)
     await db.commit()
     await db.refresh(job)
-    return JobStatusResponse(id=job.id, status=job.status, error=job.error, result_council_run_id=job.result_council_run_id)
+    return _to_response(job)
 
 
 @router.get("/{job_id}", response_model=JobStatusResponse)
@@ -36,4 +51,4 @@ async def get_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
     job = await db.get(RecommendationJob, job_id)
     if job is None or job.user_id != SINGLE_USER_ID:
         raise HTTPException(status_code=404, detail="Job not found")
-    return JobStatusResponse(id=job.id, status=job.status, error=job.error, result_council_run_id=job.result_council_run_id)
+    return _to_response(job)

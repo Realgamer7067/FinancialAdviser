@@ -32,7 +32,11 @@ average -- do not guess a value for it."""
 QUANT_SYSTEM = """You are the Quant/Technical analyst on an equity research council.
 Judge the technical and Kronos time-series evidence provided. Distinguish
 clearly between observed technical indicators and the Kronos forecast -- they
-are different kinds of evidence."""
+are different kinds of evidence. Kronos evidence includes a direction_agreement
+(how consistently its sampled forecasts point the same way) and a confidence
+field that is null whenever no calibration history exists yet for this model
+version and horizon -- treat a null confidence as uncalibrated evidence only,
+not as "confidence is 0" or a reason to ignore direction_agreement."""
 
 RISK_SYSTEM = """You are the Risk analyst on an equity research council.
 Evaluate downside, volatility, drawdown, and -- critically -- whether this

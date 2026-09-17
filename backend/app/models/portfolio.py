@@ -18,6 +18,9 @@ class PortfolioResult(Base, UUIDPKMixin):
     method: Mapped[str] = mapped_column(String)  # "mean_variance" | "finrl_drl" (stub)
     candidate_symbols: Mapped[list] = mapped_column(JSON)
     allocations: Mapped[dict] = mapped_column(JSON)  # {"TCS": 0.14, ...}
+    # Explicit, never (1 - sum(allocations)) inferred downstream -- distinguishes
+    # a real cash residual from a caller forgetting to account for it (Section 20).
+    unallocated_cash: Mapped[float] = mapped_column(Float, default=0.0)
     expected_return: Mapped[float | None] = mapped_column(Float, nullable=True)
     expected_volatility: Mapped[float | None] = mapped_column(Float, nullable=True)
     sharpe: Mapped[float | None] = mapped_column(Float, nullable=True)

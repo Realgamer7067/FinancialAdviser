@@ -18,6 +18,11 @@ class Candle(BaseModel):
     volume: int
     source: str
     retrieved_at: datetime
+    # V3 Phase 02: whether `close` is split/dividend-adjusted or a raw traded
+    # price -- this materially changes how a "return" computed from it should
+    # be interpreted, and was previously unrecorded. No default: every
+    # provider must state this explicitly, never silently assumed.
+    adjusted: bool
 
 
 class Quote(BaseModel):
@@ -97,7 +102,16 @@ class FundamentalSnapshot(BaseModel):
     pb: float | None = None
     ev_ebitda: float | None = None
     dividend_yield: float | None = None
-    promoter_holding: float | None = None
+    # yfinance's `heldPercentInsiders` is a generic global "insider ownership"
+    # figure (officers/directors), NOT the NSE-regulated "promoter holding %"
+    # disclosure Indian shareholding-pattern filings report -- they are
+    # different metrics computed from different disclosure regimes and must
+    # not be conflated (docs/V2-RETHINK.md P1: "insider ownership becomes
+    # promoter ownership"). True promoter holding needs NSE's shareholding-
+    # pattern filings (docs/V2-RETHINK.md section 6, not yet sourced) --
+    # until then this stays None, never backfilled from this proxy.
+    insider_holding_pct: float | None = None
+    promoter_holding: float | None = None  # true NSE promoter-holding %; None until a real source is wired in
     promoter_pledging: float | None = None
     institutional_ownership: float | None = None
     market_cap: float | None = None

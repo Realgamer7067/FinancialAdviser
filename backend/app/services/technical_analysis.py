@@ -92,14 +92,20 @@ def compute_technical_features(
 
     beta = None
     if benchmark_candles and len(benchmark_candles) >= 30:
+        # Align by trading DATE, not row position (docs/V2-RETHINK.md P1): the
+        # stock and benchmark candle histories can have different missing
+        # sessions (a stale/cached fetch gap, a stock-specific trading halt,
+        # etc.), so truncating both to the same length and zipping by position
+        # can pair up returns from different actual days, corrupting beta.
+        # Indexing by date and inner-joining only compares genuinely
+        # overlapping trading days.
+        stock_dated = df.set_index(df["timestamp"].dt.normalize())["close"].pct_change().dropna()
         bench_df = _candles_to_df(benchmark_candles)
-        bench_returns = bench_df["close"].pct_change().dropna()
-        n = min(len(daily_returns), len(bench_returns))
-        if n >= 20:
-            stock_r = daily_returns.tail(n).reset_index(drop=True)
-            bench_r = bench_returns.tail(n).reset_index(drop=True)
-            cov = np.cov(stock_r, bench_r)[0][1]
-            var = np.var(bench_r)
+        bench_dated = bench_df.set_index(bench_df["timestamp"].dt.normalize())["close"].pct_change().dropna()
+        aligned = pd.concat([stock_dated, bench_dated], axis=1, join="inner", keys=["stock", "bench"]).tail(252)
+        if len(aligned) >= 20:
+            cov = np.cov(aligned["stock"], aligned["bench"])[0][1]
+            var = np.var(aligned["bench"])
             beta = float(cov / var) if var > 0 else None
 
     return {

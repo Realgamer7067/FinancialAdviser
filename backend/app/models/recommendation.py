@@ -26,6 +26,15 @@ class Recommendation(Base, UUIDPKMixin):
     # set than risk_level's volatility-only band -- None when too few signals
     # were available (Section 8: never guess). See app/scoring/subscores.py::risk_tier.
     risk_tier: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Numeric composite behind risk_tier's label, plus its per-signal breakdown
+    # (volatility/drawdown/beta/debt-to-equity) -- see
+    # app/scoring/subscores.py::risk_tier_score_with_breakdown. Both None
+    # exactly when risk_tier is None (same min_inputs gate).
+    risk_tier_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    risk_tier_breakdown: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # high/medium/low -- app/scoring/final_score.py::ScoreBreakdown.confidence_band,
+    # previously computed then discarded before reaching persistence.
+    confidence_band: Mapped[str | None] = mapped_column(String, nullable=True)
     suggested_horizon: Mapped[str] = mapped_column(String)
 
     # Raw per-signal breakdown (Section 18), mirrors CandidateScore -- duplicated

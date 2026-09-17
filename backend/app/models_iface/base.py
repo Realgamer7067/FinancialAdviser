@@ -15,7 +15,13 @@ class TimeSeriesForecast(BaseModel):
     forecast_horizon: str
     direction: Literal["bullish", "neutral", "bearish"]
     predicted_return: float
-    confidence: float
+    predicted_return_p10: float
+    predicted_return_p90: float
+    direction_agreement: float
+    sample_count: int
+    # None until a calibration table exists for this (model_version, horizon,
+    # direction_agreement bucket) -- never a guessed placeholder (Section 50).
+    confidence: float | None
     input_timeframe: str
     model_name: str
     model_version: str
@@ -51,6 +57,10 @@ class FinancialLanguageModel(ABC):
 class PortfolioAllocationResult(BaseModel):
     method: str  # "mean_variance" | "finrl_drl"
     allocations: dict[str, float]
+    # Explicit, never inferred by subtracting 1 - sum(allocations) downstream --
+    # a caller must be able to trust this number even if allocations is empty
+    # or every candidate got capped below an equal share (Section 20).
+    unallocated_cash: float
     expected_return: float | None
     expected_volatility: float | None
     sharpe: float | None

@@ -1,13 +1,38 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, dashboard, education, jobs, onboarding, planning, portfolio, recommendations, stocks
+from app.api import (
+    admin,
+    catalogue,
+    dashboard,
+    education,
+    financial_inputs,
+    jobs,
+    onboarding,
+    planning,
+    plans,
+    portfolio,
+    recommendations,
+    research,
+    stocks,
+)
 from app.core.config import settings
-from app.core.db import AsyncSessionLocal
+from app.core.db import AsyncSessionLocal, engine
+from app.core.migration_barrier import assert_migration_head
 from app.core.single_user import SINGLE_USER_ID
 from app.models.user import User
 
 app = FastAPI(title="Indian AI Equity Research Platform", version="0.1.0")
+
+
+@app.on_event("startup")
+async def check_migration_head() -> None:
+    """Migration startup barrier (V3 Phase 11, instruction 2) -- refuse to
+    serve requests against a database whose applied Alembic revision doesn't
+    match what this code expects. Runs first, before anything else touches
+    the database."""
+    async with engine.connect() as conn:
+        await assert_migration_head(conn)
 
 
 @app.on_event("startup")
@@ -49,6 +74,10 @@ app.include_router(planning.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 app.include_router(education.router)
+app.include_router(financial_inputs.router)
+app.include_router(catalogue.router)
+app.include_router(research.router)
+app.include_router(plans.router)
 
 
 @app.get("/health")

@@ -1,0 +1,55 @@
+# V3 Phase 05 (docs/V3-IMPLEMENTATION-PLAN.md Section 6.2, "Policy ownership").
+#
+# IMPORTANT: this is NOT a reviewed/approved numeric allocation policy. No
+# policy reviewer has signed off on these numbers -- docs/v3-execution/STATE.md
+# records "Reviewed financial product catalogue / allocation policy" as an
+# unresolved external input, not yet supplied to this project. Per Section 6.2
+# ("if no approved policy exists, provide user-selected educational scenarios
+# with no claim of optimal suitability"), these scenarios are labelled
+# synthetic/educational and must never be presented to a user as personalized
+# or optimal advice. A real deployment needs a policy reviewer's sign-off on
+# this file's numbers before backend/app/services/capacity_policy.py (or any
+# successor) is wired into a live personalized recommendation path.
+
+schema_version: 1
+policy_version: "synthetic_educational_v1"
+effective_date: "2026-09-14"
+is_synthetic: true  # never presented as an approved/optimal policy -- see rationale below
+
+rationale: >
+  No reviewed/approved numeric allocation policy has been supplied to this
+  project (docs/v3-execution/STATE.md). These are user-selectable EDUCATIONAL
+  scenarios for exploring allocation tradeoffs, not a claim of suitability
+  or optimality. A real deployment needs a policy reviewer's sign-off
+  before this file's scenarios are presented as personalized advice.
+
+scenarios:
+  - id: "conservative_capacity_short_horizon"
+    label: "Conservative -- short horizon or low capacity"
+    target_exposure: {domestic_equity: 0.30, fixed_income: 0.55, cash: 0.15}
+    max_direct_stock_sleeve_fraction: 0.10
+    eligible_goal_horizon_years_min: 0
+    eligible_goal_horizon_years_max: 3
+
+  - id: "moderate_capacity_medium_horizon"
+    label: "Moderate -- medium horizon or moderate capacity"
+    target_exposure: {domestic_equity: 0.55, fixed_income: 0.35, cash: 0.10}
+    max_direct_stock_sleeve_fraction: 0.20
+    eligible_goal_horizon_years_min: 3
+    eligible_goal_horizon_years_max: 7
+
+  - id: "growth_capacity_long_horizon"
+    label: "Growth -- long horizon and adequate capacity"
+    target_exposure: {domestic_equity: 0.70, fixed_income: 0.20, cash: 0.10}
+    max_direct_stock_sleeve_fraction: 0.30
+    eligible_goal_horizon_years_min: 7
+    eligible_goal_horizon_years_max: null  # no upper bound
+
+issuer_concentration_limit: 0.10  # applies across all scenarios -- V3 6.3
+
+# Left empty in this synthetic policy: a real per-product annual cap needs
+# real product terms. Phase 03's product catalogue is itself explicitly
+# synthetic fixtures (docs/v3-execution/STATE.md), so there is no real
+# product data to derive caps from yet. Documented known limitation, not an
+# oversight.
+annual_product_cap_examples: {}

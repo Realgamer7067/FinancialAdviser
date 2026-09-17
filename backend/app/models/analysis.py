@@ -47,7 +47,13 @@ class KronosPrediction(Base, UUIDPKMixin):
     forecast_horizon: Mapped[str] = mapped_column(String)  # "7d" / "30d" / "90d"
     direction: Mapped[str] = mapped_column(String)  # bullish/neutral/bearish
     predicted_return: Mapped[float] = mapped_column(Float)
-    confidence: Mapped[float] = mapped_column(Float)
+    predicted_return_p10: Mapped[float] = mapped_column(Float)
+    predicted_return_p90: Mapped[float] = mapped_column(Float)
+    direction_agreement: Mapped[float] = mapped_column(Float)
+    sample_count: Mapped[int] = mapped_column(Integer)
+    # None until a calibration table exists for this (model_version, horizon,
+    # direction_agreement bucket) -- never a guessed placeholder (Section 50).
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     input_timeframe: Mapped[str] = mapped_column(String)
     model_name: Mapped[str] = mapped_column(String, default="Kronos")
     model_version: Mapped[str] = mapped_column(String)
