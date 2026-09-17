@@ -11,6 +11,11 @@ copy of the build plan) for the full architecture rationale. Trading execution i
 thing still deliberately out of scope (Section 46, hard rule) -- Kronos, FinRL, and
 backtesting are all real and verified now, see "What's real" below for each one's caveats.
 
+See `ARCHITECTURE.md` for a module-by-module map of the current codebase, and
+`docs/v3-execution/` for the full phase-by-phase build/verification ledger behind
+everything added since the original MVP (holdings/goals/catalogue, research pipeline with
+real web search and report synthesis, Gemini adapter, allocation engine).
+
 ## Stack
 
 - **Backend**: FastAPI + SQLAlchemy (async) + Alembic + Postgres
