@@ -74,7 +74,7 @@ async def _seed_portfolio(
                 low=price,
                 close=price,
                 volume=1000,
-                source="test_fixture",
+                source="demo_seed",  # matches _force_hermetic_settings' demo_mode=True
                 retrieved_at=utcnow(),
             )
         )
@@ -143,3 +143,55 @@ async def test_latest_portfolio_includes_sectors_by_symbol(client, db_session):
     assert res.status_code == 200
     body = res.json()
     assert body["sectors"] == {"TCS": "IT", "INFY": "IT"}
+    assert body["has_allocation"] is True
+
+
+async def test_newer_empty_run_supersedes_older_populated_portfolio(client, db_session):
+    # docs/v3-execution/CONTRACTS.md C1: run A completed with a real
+    # allocation; run B is a LATER completed run that produced no allocation
+    # at all (every candidate excluded post-gate). /latest and /allocate must
+    # reflect B's outcome (no allocation), never silently keep serving A's
+    # stale allocation just because it's the newest row that happens to
+    # exist in PortfolioRecommendation.
+    db_session.add(User(id=SINGLE_USER_ID, email="user@local", full_name="User", hashed_password="unused"))
+    await db_session.flush()
+
+    run_a = CouncilRun(
+        user_id=SINGLE_USER_ID, market_regime="normal", universe_size=1, candidates_after_screen=1,
+        candidates_after_kronos_news=1, candidates_to_council=1, plan={}, status="done",
+        started_at=utcnow(), completed_at=utcnow(),
+    )
+    db_session.add(run_a)
+    await db_session.flush()
+    result_a = PortfolioResult(
+        user_id=SINGLE_USER_ID, method="mean_variance", candidate_symbols=["TCS"], allocations={"TCS": 1.0},
+        expected_return=0.1, expected_volatility=0.2, sharpe=0.5, model_version="test", generated_at=utcnow(),
+    )
+    db_session.add(result_a)
+    await db_session.flush()
+    db_session.add(
+        PortfolioRecommendation(
+            user_id=SINGLE_USER_ID, council_run_id=run_a.id, portfolio_result_id=result_a.id,
+            allocations={"TCS": 1.0}, notes=[], created_at=utcnow(),
+        )
+    )
+    await db_session.commit()
+
+    # Run B: completed LATER, no accepted candidates -> no PortfolioRecommendation at all.
+    run_b = CouncilRun(
+        user_id=SINGLE_USER_ID, market_regime="high_volatility", universe_size=1, candidates_after_screen=0,
+        candidates_after_kronos_news=0, candidates_to_council=0, plan={}, status="done",
+        started_at=utcnow(), completed_at=utcnow(),
+    )
+    db_session.add(run_b)
+    await db_session.commit()
+
+    res = await client.get("/api/portfolio/latest")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["has_allocation"] is False
+    assert body["allocations"] == {}
+    assert body["reason"] is not None
+
+    res = await client.post("/api/portfolio/allocate", json={"amount": 1000})
+    assert res.status_code == 404

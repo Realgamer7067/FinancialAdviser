@@ -24,6 +24,24 @@ def _force_hermetic_settings(monkeypatch):
     # fallback paths the tests are actually designed to exercise.
     monkeypatch.setattr(settings, "demo_mode", True)
     monkeypatch.setattr(settings, "qwen_api_key", "")
+    monkeypatch.setattr(settings, "qwen_api_key_pool", "")
+    # Same reasoning, for app/services/web_search.py (added 2026-09-16):
+    # discover_urls reads settings.gemini_api_key directly, not through the
+    # qwen_* provider above -- left unreset, any test that leaves a research
+    # branch's URLs empty (find_sources defaults True) would make a REAL
+    # live Gemini search call using whatever key this machine's real .env
+    # happens to have. Found by inspection, not by a test actually failing
+    # from it -- test_research_api.py's existing test only avoided it by
+    # coincidence (it supplies explicit URLs for all 3 branches).
+    monkeypatch.setattr(settings, "gemini_api_key", "")
+    # Same reasoning as above, for the test/rehearsal-only overrides added
+    # 2026-09-16 for testing against a restored Postgres dump (see
+    # scripts/restore_postgres_backup.sh) -- a real deployment's .env can
+    # legitimately set these, and left unreset they silently swap which
+    # candle source/staleness rule the hermetic suite exercises.
+    monkeypatch.setattr(settings, "market_data_source_override", None)
+    monkeypatch.setattr(settings, "market_data_staleness_override_days", None)
+    monkeypatch.setattr(settings, "fundamentals_staleness_override_hours", None)
 
 
 @pytest_asyncio.fixture
