@@ -1,0 +1,33 @@
+# V3 Phase 11 packaging pass: backend/Dockerfile does `COPY . .` with build
+# context `./backend` -- without this file everything below gets copied into
+# the image unconditionally, including large/private local dev artifacts
+# that have no business in a container image (the Dockerfile clones its own
+# Kronos checkout to /opt/kronos and installs its own deps into the image;
+# none of this should ride along from the host).
+
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# The Dockerfile clones Kronos itself (to /opt/kronos) -- a local checkout
+# here (from run.sh's non-docker dev path) would otherwise be copied in too,
+# duplicating ~100+ files for nothing.
+vendor/
+
+# Runtime caches / model weights -- mounted as a volume in docker-compose.yml
+# (./data:/app/data), never baked into the image.
+data/cache/
+data/raw/
+data/processed/
+
+.env
+*.log
+.DS_Store
+
+# TrueData: NDA-covered, never ships anywhere (see CLAUDE.md / memory rule).
+.TD_API_Docs/
+data/truedata_raw/
+*truedata*.csv
+*truedata*.json

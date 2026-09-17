@@ -35,6 +35,12 @@ services:
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
 
   worker:
     build: ./backend
@@ -48,22 +54,47 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # V3 Phase 11: the migration startup barrier (app/core/migration_barrier.py)
+      # now makes the worker exit immediately if `alembic_version` doesn't match
+      # code head -- correct when the schema is genuinely stale/ahead, but the
+      # `backend` service is what actually runs `alembic upgrade head` (its own
+      # command below); without this the worker could start and exit before
+      # that migration lands, with nothing to restart it. `backend` now has a
+      # real /health-based healthcheck (added this pass), so `service_healthy`
+      # closes this race properly instead of only narrowing it with
+      # `service_started`. `restart: on-failure` below still covers a genuine
+      # incompatible-schema failure, which crash-loops visibly in the logs
+      # instead of exiting once silently.
+      backend:
+        condition: service_healthy
+    restart: on-failure
     volumes:
       - ./data:/app/data
       - ./config:/app/config
     command: python -m app.worker
+    # Both services build from the same backend/Dockerfile, whose HEALTHCHECK
+    # probes localhost:8000/health -- correct for `backend` (real uvicorn
+    # server there) but meaningless for `worker` (a poll loop, listens on
+    # nothing). Left inherited, it just crash-loops the check forever and
+    # marks the container "unhealthy" for no real reason (found 2026-09-16 --
+    # nothing in this compose file actually depends on worker's own health,
+    # so it was silent noise, not a functional bug, but still wrong).
+    healthcheck:
+      disable: true
 
   frontend:
     build: ./frontend
     environment:
-      # Server-side only (read by next.config.js's rewrite proxy at request
-      # time) -- "backend" is the compose service hostname, reachable over
-      # the compose network regardless of what URL the browser is on.
+      # Server-side only (read at request time by the Next.js Route Handler
+      # proxy at src/app/api/[...path]/route.ts, not next.config.js) --
+      # "backend" is the compose service hostname, reachable over the
+      # compose network regardless of what URL the browser is on.
       INTERNAL_API_URL: http://backend:8000
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:
