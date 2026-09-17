@@ -1,3 +1,10 @@
+import { SkeletonCard } from "@/components/ui/Skeleton";
+
 export default function GlobalLoading() {
-  return <p className="text-sm text-slate-500">Loading...</p>;
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <SkeletonCard />
+      <SkeletonCard />
+    </div>
+  );
 }

@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { api, ApiError } from "@/lib/api";
 import type { CouncilRunSummary, StockDetail } from "@/lib/types";
+import { fadeInUp, staggerChildren } from "@/lib/motion";
 import StockSummaryCard from "@/components/StockSummaryCard";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 
 const SLOT_COUNT = 3;
 
@@ -76,18 +79,20 @@ function ComparePageInner() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Compare stocks</h1>
-      <p className="text-sm text-slate-500">Pick up to {SLOT_COUNT} stocks to view side by side.</p>
+    <motion.div initial="hidden" animate="visible" variants={staggerChildren} className="space-y-6">
+      <motion.div variants={fadeInUp}>
+        <h1 className="text-xl font-semibold text-text-primary">Compare stocks</h1>
+        <p className="text-sm text-text-muted">Pick up to {SLOT_COUNT} stocks to view side by side.</p>
+      </motion.div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <motion.div variants={fadeInUp} className="grid gap-4 sm:grid-cols-3">
         {Array.from({ length: SLOT_COUNT }).map((_, i) => (
-          <div key={i} className="rounded border bg-white p-3">
-            <label className="block text-xs font-medium text-slate-500">Slot {i + 1}</label>
+          <Card key={i} className="p-3">
+            <label className="block text-xs font-medium text-text-muted">Slot {i + 1}</label>
             <select
               value={candidates.includes(symbols[i]) ? symbols[i] : ""}
               onChange={(e) => setSlot(i, e.target.value)}
-              className="mt-1 w-full rounded border px-2 py-1 text-sm"
+              className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <option value="">-- pick from last analysis --</option>
               {candidates.map((c) => (
@@ -109,10 +114,11 @@ function ComparePageInner() {
                     return next;
                   });
                 }}
-                className="w-full rounded border px-2 py-1 text-sm"
+                className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               />
               <Button
                 variant="secondary"
+                size="sm"
                 onClick={() => setSlot(i, manualInput[i])}
                 disabled={!manualInput[i]}
                 className="shrink-0"
@@ -120,17 +126,15 @@ function ComparePageInner() {
                 Go
               </Button>
             </div>
-            {errors[i] && <p className="mt-1 text-xs text-red-600">{errors[i]}</p>}
-          </div>
+            {errors[i] && <p className="mt-1 text-xs text-negative">{errors[i]}</p>}
+          </Card>
         ))}
-      </div>
+      </motion.div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {stocks.map((stock, i) =>
-          stock ? <StockSummaryCard key={i} stock={stock} /> : <div key={i} />
-        )}
-      </div>
-    </div>
+      <motion.div variants={fadeInUp} className="grid gap-4 sm:grid-cols-3">
+        {stocks.map((stock, i) => (stock ? <StockSummaryCard key={i} stock={stock} /> : <div key={i} />))}
+      </motion.div>
+    </motion.div>
   );
 }
 
