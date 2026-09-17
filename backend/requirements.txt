@@ -16,7 +16,7 @@ transformers==4.45.1
 huggingface-hub==0.25.1
 PyPortfolioOpt==1.6.0
 openai==1.51.0
-yfinance==0.2.44
+yfinance==1.7.0
 tenacity==9.0.0
 PyYAML==6.0.2
 

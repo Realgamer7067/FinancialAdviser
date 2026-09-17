@@ -4,11 +4,12 @@ hardcoded to one host. Every call returns pydantic-validated structured output;
 invalid JSON gets one repair retry before failing loudly (never silently
 accepted -- Section 42)."""
 
+import itertools
 import json
 from abc import ABC, abstractmethod
 from typing import TypeVar
 
-from openai import APIError, AsyncOpenAI
+from openai import APIError, AsyncOpenAI, RateLimitError
 from pydantic import BaseModel, ValidationError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
@@ -34,8 +35,25 @@ class LLMProvider(ABC):
 
 class QwenOpenAICompatibleProvider(LLMProvider):
     def __init__(self):
-        self._client = AsyncOpenAI(base_url=settings.qwen_base_url, api_key=settings.qwen_api_key or "unset")
+        # Optional key pool (V3, 2026-09-16 -- multiple Gemini API keys, each
+        # with its own independent quota, pointed at the same base_url/model
+        # via QWEN_BASE_URL/QWEN_MODEL). Round-robins across them per call to
+        # spread load proactively, and on a 429 specifically retries with the
+        # NEXT key immediately rather than backing off against an already
+        # -exhausted one. A single configured key behaves exactly as before.
+        keys = [settings.qwen_api_key] if settings.qwen_api_key else []
+        keys += [k.strip() for k in settings.qwen_api_key_pool.split(",") if k.strip()]
+        keys = list(dict.fromkeys(keys))  # de-dupe, preserve order
+        self._keys = keys or ["unset"]
+        self._clients = [AsyncOpenAI(base_url=settings.qwen_base_url, api_key=k) for k in self._keys]
+        self._client_cycle = itertools.cycle(range(len(self._clients)))
         self._model = settings.qwen_model
+        # Honest label derived from the configured host, not assumed --
+        # "qwen_base_url" is the settings field name (kept for backward
+        # compatibility with existing config/migrations/tests), but this
+        # class works with any OpenAI-compatible endpoint per its own
+        # docstring, Gemini's included.
+        self._provider_label = "Gemini" if "generativelanguage.googleapis.com" in settings.qwen_base_url else self._model
 
     @retry(
         reraise=True,
@@ -62,17 +80,7 @@ class QwenOpenAICompatibleProvider(LLMProvider):
             },
             {"role": "user", "content": json.dumps(user_payload, default=str)},
         ]
-        try:
-            response = await self._client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                response_format={"type": "json_object"},
-                temperature=0.2,
-            )
-        except APIError as exc:
-            # Auth/connection/rate-limit/etc -- a missing signal, not a crash
-            # (Section 50: a failed specialist shouldn't take down the run).
-            raise StructuredOutputError(f"Qwen API call failed: {exc}") from exc
+        response = await self._create_completion(messages)
 
         if not response.choices:
             # Observed in practice: OpenRouter returning a 200 with a
@@ -98,8 +106,40 @@ class QwenOpenAICompatibleProvider(LLMProvider):
             raise StructuredOutputError(f"Invalid structured output from {self._model}: {exc}") from exc
 
         metadata = {
-            "model_name": "Qwen",
+            # Was a hardcoded "Qwen" literal -- misleading once this
+            # config-driven OpenAI-compatible provider gets pointed at a
+            # different backend (e.g. Gemini's OpenAI-compat endpoint).
+            # Derive from the actual configured base_url/model instead of
+            # asserting a specific vendor (Section 26: honest provenance).
+            "model_name": self._provider_label,
             "model_version": self._model,
             "prompt_version": prompt_version,
         }
         return parsed, metadata
+
+    async def _create_completion(self, messages: list[dict]):
+        """Round-robins across the configured key pool for load spreading;
+        on a 429 specifically, retries with the NEXT key immediately (up to
+        one full lap of the pool) instead of hammering an already-exhausted
+        key. Any other APIError still fails through to StructuredOutputError
+        -- Section 50: a failed specialist shouldn't take down the run."""
+        last_rate_limit_exc: RateLimitError | None = None
+        for _ in range(len(self._clients)):
+            client_index = next(self._client_cycle)
+            client = self._clients[client_index]
+            try:
+                return await client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,
+                    response_format={"type": "json_object"},
+                    temperature=0.2,
+                )
+            except RateLimitError as exc:
+                last_rate_limit_exc = exc
+                continue  # try the next key in the pool, no sleep
+            except APIError as exc:
+                raise StructuredOutputError(f"Qwen API call failed: {exc}") from exc
+
+        raise StructuredOutputError(
+            f"All {len(self._clients)} configured key(s) rate-limited: {last_rate_limit_exc}"
+        )
