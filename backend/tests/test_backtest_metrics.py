@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from app.backtesting.metrics import (
+    BacktestReport,
     annualized_return,
     annualized_volatility,
     hit_rate,
@@ -81,3 +82,32 @@ def test_hit_rate_known_series():
 
 def test_hit_rate_empty_series_is_zero():
     assert hit_rate(pd.Series(dtype=float)) == 0.0
+
+
+def test_report_as_dict_has_no_fee_or_cost_field():
+    """V3 Phase 09 audit (item 4): the engine models no transaction costs,
+    fees, slippage, or corporate-action drag (see app/backtesting/engine.py
+    docstring). That's a disclosed scope gap, not this review's to close --
+    but it must stay disclosed. This pins BacktestReport.as_dict()'s exact
+    key set so that a future change silently adding a fee-adjusted number
+    (or renaming/repurposing a field to imply cost-awareness) without
+    updating the docstring caveat gets caught here instead of shipping
+    quietly."""
+    returns = pd.Series([0.01, -0.01, 0.02])
+    benchmark = pd.Series([0.005, 0.0, 0.01])
+    report = BacktestReport(returns, benchmark, risk_free_rate=0.07)
+
+    keys = set(report.as_dict().keys())
+    expected_keys = {
+        "periods",
+        "annualized_return",
+        "annualized_volatility",
+        "sharpe",
+        "sortino",
+        "max_drawdown",
+        "hit_rate",
+        "benchmark_annualized_return",
+        "benchmark_max_drawdown",
+    }
+    assert keys == expected_keys
+    assert not any("fee" in k or "cost" in k or "net_of" in k for k in keys)

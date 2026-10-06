@@ -93,7 +93,7 @@ async def _fetch_eod_bars(client: httpx.AsyncClient, token: str, symbol: str) ->
     bars = []
     for line in text.splitlines():
         parts = line.strip().split(",")
-        if len(parts) < 7:
+        if len(parts) < 7 or parts[0].lower() == "timestamp":
             continue
         timestamp, open_, high, low, close, volume, _oi = parts[:7]
         bars.append(

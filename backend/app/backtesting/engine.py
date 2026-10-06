@@ -23,6 +23,32 @@ Scope/limitations, stated plainly rather than hidden:
   constituent lists, which weren't sourced for this build. Report this
   caveat alongside any number this module produces -- never state a Sharpe/
   return figure from here without it.
+- PRICE CONVENTION (previously undocumented -- V3 Phase 09 audit): `prices`
+  and `benchmark_prices` are plain columns of closes; this module does no
+  split/dividend adjustment of its own and has no opinion about what's in
+  them -- whatever return convention the caller's closes encode is exactly
+  what `pct_change()` reports back, untouched. In practice every caller in
+  this codebase (`scripts/run_backtest.py`, `app/services/price_history.py`)
+  fetches via `yfinance` with `auto_adjust=True`, i.e. split/dividend
+  -adjusted closes -- the same `adjusted=True` convention documented on
+  `app.providers.base.Candle`/`MarketCandle` for the live pipeline. That
+  makes these realized returns approximate TOTAL return (dividends assumed
+  reinvested on the ex-date), not raw price return -- a real distinction,
+  not a rounding detail, since an un-adjusted feed would inject a fake
+  ~-50% "return" on every 2:1 split day with no offsetting economic loss.
+  If a future caller passes raw (`adjusted=False`) closes instead, this
+  module will silently report total-return-shaped numbers as if they were
+  price-return, or vice versa, with no internal check -- see
+  `tests/test_backtest_engine.py::test_engine_reflects_whatever_price_convention_it_is_given`.
+- NO TRANSACTION COSTS / FEES: rebalancing here is frictionless -- no
+  brokerage, STT, slippage, or bid-ask spread is deducted at any rebalance.
+  `BacktestReport.as_dict()` has no fee-adjusted field and does not claim
+  one; see `tests/test_backtest_metrics.py::test_report_as_dict_has_no_fee_or_cost_field`.
+  Real trading costs would lower every return number here.
+- CORPORATE ACTIONS: not modeled explicitly by this module -- to the extent
+  splits/dividends are reflected at all, it's only because the adjusted
+  closes described above already bake them in upstream. No other corporate
+  action (buyback, spin-off, delisting mid-backtest) is handled.
 """
 
 import asyncio
@@ -121,8 +147,15 @@ async def run_backtest(
         if not allocation.allocations:
             continue
 
-        holding_period = prices.loc[reb_date:hold_until].iloc[1:]  # returns realized AFTER the rebalance date
-        if holding_period.empty:
+        # Include reb_date itself as the pct_change() base price -- dropping
+        # it up front (a prior `.iloc[1:]`) meant pct_change() had no prior
+        # row to compute the FIRST holding-period return against, and
+        # dropna() silently discarded that day's realized return from every
+        # single period (docs/V2-RETHINK.md P1). Keeping reb_date as the base
+        # and letting pct_change()+dropna() drop only its own leading NaN
+        # correctly keeps the reb_date -> first-held-day return.
+        holding_period = prices.loc[reb_date:hold_until]
+        if len(holding_period) < 2:
             continue
         holding_returns = holding_period[list(allocation.allocations.keys())].pct_change().dropna()
         weights = pd.Series(allocation.allocations)

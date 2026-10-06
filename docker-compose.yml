@@ -3,10 +3,12 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: equity_research
+    # Loopback only: run.sh / local alembic reach it at localhost:5432 but no
+    # other machine can.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,54 +18,106 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      network: host      # same reason as the frontend build: pip downloads over the VPN need the host network
     env_file: .env
     environment:
       CONFIG_DIR: /app/config
       DATA_DIR: /app/data
       KRONOS_REPO_PATH: /opt/kronos
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/equity_research
-      SYNC_DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/equity_research
+      ANGEL_SESSION_DIR: /angel-session
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@postgres:5432/equity_research
+      SYNC_DATABASE_URL: postgresql+psycopg2://postgres:${POSTGRES_PASSWORD}@postgres:5432/equity_research
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data
       - ./config:/app/config
+      # Angel session written by the operator CLI on the host (~/.local/state/pie). Read-only: containers only read it.
+      - ${HOME}/.local/state/pie:/angel-session:ro
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
 
   worker:
-    build: ./backend
+    build:
+      context: ./backend
+      network: host
     env_file: .env
     environment:
       CONFIG_DIR: /app/config
       DATA_DIR: /app/data
       KRONOS_REPO_PATH: /opt/kronos
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/equity_research
-      SYNC_DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/equity_research
+      ANGEL_SESSION_DIR: /angel-session
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD}@postgres:5432/equity_research
+      SYNC_DATABASE_URL: postgresql+psycopg2://postgres:${POSTGRES_PASSWORD}@postgres:5432/equity_research
     depends_on:
       postgres:
         condition: service_healthy
+      # V3 Phase 11: the migration startup barrier (app/core/migration_barrier.py)
+      # now makes the worker exit immediately if `alembic_version` doesn't match
+      # code head -- correct when the schema is genuinely stale/ahead, but the
+      # `backend` service is what actually runs `alembic upgrade head` (its own
+      # command below); without this the worker could start and exit before
+      # that migration lands, with nothing to restart it. `backend` now has a
+      # real /health-based healthcheck (added this pass), so `service_healthy`
+      # closes this race properly instead of only narrowing it with
+      # `service_started`. `restart: on-failure` below still covers a genuine
+      # incompatible-schema failure, which crash-loops visibly in the logs
+      # instead of exiting once silently.
+      backend:
+        condition: service_healthy
+    restart: on-failure
     volumes:
       - ./data:/app/data
       - ./config:/app/config
+      # Angel session written by the operator CLI on the host (~/.local/state/pie). Read-only: containers only read it.
+      - ${HOME}/.local/state/pie:/angel-session:ro
     command: python -m app.worker
+    # Both services build from the same backend/Dockerfile, whose HEALTHCHECK
+    # probes localhost:8000/health -- correct for `backend` (real uvicorn
+    # server there) but meaningless for `worker` (a poll loop, listens on
+    # nothing). Left inherited, it just crash-loops the check forever and
+    # marks the container "unhealthy" for no real reason (found 2026-09-16 --
+    # nothing in this compose file actually depends on worker's own health,
+    # so it was silent noise, not a functional bug, but still wrong).
+    healthcheck:
+      disable: true
 
   frontend:
-    build: ./frontend
+    # Next fetches Google Fonts at build time. Builds run on Docker's own default network, which has the same 1500-vs-1280 MTU
+    # problem as the services (see `networks` below), so build on the host's network.
+    build:
+      context: ./frontend
+      network: host
     environment:
-      # Server-side only (read by next.config.js's rewrite proxy at request
-      # time) -- "backend" is the compose service hostname, reachable over
-      # the compose network regardless of what URL the browser is on.
+      # Server-side only (read at request time by the Next.js Route Handler
+      # proxy at src/app/api/[...path]/route.ts, not next.config.js) --
+      # "backend" is the compose service hostname, reachable over the
+      # compose network regardless of what URL the browser is on.
       INTERNAL_API_URL: http://backend:8000
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+
+# The host reaches Angel through a VPN whose interface MTU is 1280 (VpnHood, Tailscale: 1280). Docker's default bridge is 1500, so
+# full-size TLS packets from the containers are silently dropped and every broker call times out. Match the smaller MTU.
+networks:
+  default:
+    driver_opts:
+      com.docker.network.driver.mtu: "1280"
 
 volumes:
   postgres_data:

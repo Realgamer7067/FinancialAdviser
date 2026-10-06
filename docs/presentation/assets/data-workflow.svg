@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+<title id="title">Financial Advisor — data to review</title>
+<desc id="desc">Complete imports feed the twin; unknown, partial and stale data remain visible.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker></defs>
+<rect width="1600" height="900" fill="#f8fafc"/>
+<text x="65" y="94" font-family="DejaVu Sans,Arial,sans-serif" font-size="38" font-weight="700" fill="#0f172a" text-anchor="start">Financial Advisor — data to review</text>
+<text x="65" y="129" font-family="DejaVu Sans,Arial,sans-serif" font-size="21" font-weight="400" fill="#0f172a" text-anchor="start">Complete imports feed the twin; unknown, partial and stale data remain visible.</text>
+<rect x="410" y="175" width="780" height="110" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="800.0" y="220" font-family="DejaVu Sans,Arial,sans-serif" font-size="25" font-weight="700" fill="#0f172a" text-anchor="middle">Acquire account observations</text>
+<text x="800.0" y="258" font-family="DejaVu Sans,Arial,sans-serif" font-size="21" font-weight="400" fill="#0f172a" text-anchor="middle">Manual / CSV / optional read-only Angel</text>
+<rect x="410" y="340" width="780" height="110" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="800.0" y="385" font-family="DejaVu Sans,Arial,sans-serif" font-size="25" font-weight="700" fill="#0f172a" text-anchor="middle">Validate identity and rows</text>
+<text x="800.0" y="423" font-family="DejaVu Sans,Arial,sans-serif" font-size="21" font-weight="400" fill="#0f172a" text-anchor="middle">Dates, values, quantities, identifiers and batch quality</text>
+<rect x="90" y="525" width="660" height="145" rx="14" fill="#ecfdf5" stroke="#0f766e" stroke-width="2"/>
+<text x="420.0" y="570" font-family="DejaVu Sans,Arial,sans-serif" font-size="25" font-weight="700" fill="#0f172a" text-anchor="middle">Complete usable import</text>
+<text x="420.0" y="608" font-family="DejaVu Sans,Arial,sans-serif" font-size="21" font-weight="400" fill="#0f172a" text-anchor="middle">Latest complete batch per included account</text>
+<text x="420.0" y="637" font-family="DejaVu Sans,Arial,sans-serif" font-size="21" font-weight="400" fill="#0f172a" text-anchor="middle">Bind financial facts, goals and claims</text>
+<rect x="850" y="525" width="660" height="145" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="1180.0" y="570" font-family="DejaVu Sans,Arial,sans-serif" font-size="25" font-weight="700" fill="#0f172a" text-anchor="middle">Partial, invalid or unavailable</text>
+<text x="1180.0" y="608" font-family="DejaVu Sans,Arial,sans-serif" font-size="21" font-weight="400" fill="#0f172a" text-anchor="middle">Report errors; retain prior complete data</text>
+<text x="1180.0" y="637" font-family="DejaVu Sans,Arial,sans-serif" font-size="21" font-weight="400" fill="#0f172a" text-anchor="middle">No invented zero balances or identities</text>
+<rect x="210" y="735" width="1180" height="110" rx="14" fill="#ecfdf5" stroke="#0f766e" stroke-width="2"/>
+<text x="800.0" y="780" font-family="DejaVu Sans,Arial,sans-serif" font-size="25" font-weight="700" fill="#0f172a" text-anchor="middle">Twin + valuation + readiness → risk / plans / comparisons</text>
+<text x="800.0" y="818" font-family="DejaVu Sans,Arial,sans-serif" font-size="21" font-weight="400" fill="#0f172a" text-anchor="middle">Dated source coverage, hard gates, conserved money and owner review</text>
+<polyline points="800,285 800,340" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<polyline points="800,450 800,480 420,480 420,525" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<text x="450" y="506" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="400" fill="#475569" text-anchor="middle">accepted complete</text>
+<polyline points="800,450 800,480 1180,480 1180,525" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<text x="1190" y="506" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="400" fill="#475569" text-anchor="middle">report gaps</text>
+<polyline points="420,670 420,735" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<polyline points="1180,670 1180,735" fill="none" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+<text x="1360" y="706" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="400" fill="#475569" text-anchor="middle">use prior complete data</text>
+<text x="65" y="877" font-family="DejaVu Sans,Arial,sans-serif" font-size="17" font-weight="400" fill="#64748b" text-anchor="start">Financial Advisor  |  Conceptual implementation diagram  |  Read-only owner analysis</text>
+</svg>

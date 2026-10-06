@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.single_user import SINGLE_USER_ID
-from app.models.council import CouncilRun
+from app.models.council import CouncilOutput, CouncilRun
 from app.models.market import Instrument
 from app.models.recommendation import Recommendation
-from app.schemas.recommendation import CouncilRunSummary, RecommendationCard
+from app.schemas.recommendation import CouncilRoleOutput, CouncilRunSummary, RecommendationCard
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
 
@@ -26,6 +26,32 @@ async def _build_summary(db: AsyncSession, council_run: CouncilRun) -> CouncilRu
             .order_by(Recommendation.score.desc())
         )
     ).all()
+
+    # One extra query for all roles across all candidates in this run, grouped
+    # in Python by instrument_id -- council_outputs was always persisted, just
+    # never read by any endpoint before Phase 0B #1.
+    outputs_by_instrument: dict = {}
+    if rows:
+        output_rows = (
+            await db.execute(
+                select(CouncilOutput).where(
+                    CouncilOutput.council_run_id == council_run.id,
+                    CouncilOutput.instrument_id.in_([instrument.id for _, instrument in rows]),
+                )
+            )
+        ).scalars().all()
+        for out in output_rows:
+            outputs_by_instrument.setdefault(out.instrument_id, []).append(
+                CouncilRoleOutput(
+                    role=out.role,
+                    content=out.content,
+                    model_name=out.model_name,
+                    model_version=out.model_version,
+                    prompt_version=out.prompt_version,
+                    created_at=out.created_at,
+                )
+            )
+
     cards = [
         RecommendationCard(
             id=rec.id,
@@ -33,9 +59,12 @@ async def _build_summary(db: AsyncSession, council_run: CouncilRun) -> CouncilRu
             name=instrument.name,
             recommendation=rec.recommendation,
             confidence=rec.confidence,
+            confidence_band=rec.confidence_band,
             score=rec.score,
             risk_level=rec.risk_level,
             risk_tier=rec.risk_tier,
+            risk_tier_score=rec.risk_tier_score,
+            risk_tier_breakdown=rec.risk_tier_breakdown,
             suggested_horizon=rec.suggested_horizon,
             strengths=rec.strengths,
             risks=rec.risks,
@@ -50,6 +79,7 @@ async def _build_summary(db: AsyncSession, council_run: CouncilRun) -> CouncilRu
             model_agreement=rec.model_agreement,
             data_quality=rec.data_quality,
             generated_at=rec.generated_at,
+            council_outputs=outputs_by_instrument.get(instrument.id, []),
         )
         for rec, instrument in rows
     ]
@@ -70,9 +100,18 @@ async def _build_summary(db: AsyncSession, council_run: CouncilRun) -> CouncilRu
 
 @router.get("/latest", response_model=CouncilRunSummary)
 async def latest_recommendations(db: AsyncSession = Depends(get_db)):
+    # Must be the newest COMPLETED run, full stop -- never skip past it just
+    # because it happened to produce zero recommendation rows (a legitimate
+    # "no opportunity" outcome, Section 20). Filtering runs by "has at least
+    # one Recommendation row" silently served an older, stale run instead and
+    # let a user mistake a past opportunity for the current one
+    # (docs/V2-RETHINK.md P0). "running"/"failed" runs are excluded here --
+    # they're surfaced through job status, not as a stale prior result.
     council_run = (
         await db.execute(
-            select(CouncilRun).where(CouncilRun.user_id == SINGLE_USER_ID).order_by(CouncilRun.started_at.desc())
+            select(CouncilRun)
+            .where(CouncilRun.user_id == SINGLE_USER_ID, CouncilRun.status == "done")
+            .order_by(CouncilRun.completed_at.desc())
         )
     ).scalars().first()
     if council_run is None:

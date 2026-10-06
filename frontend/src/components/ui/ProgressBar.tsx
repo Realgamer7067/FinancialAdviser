@@ -1,8 +1,13 @@
+"use client";
+
+import { motion } from "framer-motion";
+import { EASE_OUT } from "@/lib/motion";
+
 export default function ProgressBar({
   label,
   value,
   displayValue,
-  colorClass = "bg-brand-600",
+  colorClass = "bg-accent",
 }: {
   label: string;
   value: number; // 0-100
@@ -12,11 +17,16 @@ export default function ProgressBar({
   const clamped = Math.max(0, Math.min(value, 100));
   return (
     <div className="flex items-center gap-3">
-      <span className="w-32 shrink-0 text-sm text-slate-600">{label}</span>
-      <div className="h-2 flex-1 rounded bg-slate-100">
-        <div className={`h-2 rounded ${colorClass}`} style={{ width: `${clamped}%` }} />
+      <span className="w-32 shrink-0 text-sm text-text-muted">{label}</span>
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-border/60">
+        <motion.div
+          className={`h-2 rounded-full ${colorClass}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${clamped}%` }}
+          transition={{ duration: 0.5, ease: EASE_OUT }}
+        />
       </div>
-      <span className="w-12 shrink-0 text-right text-sm text-slate-600">
+      <span className="w-12 shrink-0 text-right text-sm text-text-muted">
         {displayValue ?? `${clamped.toFixed(0)}%`}
       </span>
     </div>

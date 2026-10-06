@@ -1,11 +1,16 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { api, ApiError } from "@/lib/api";
 import type { GoalSipOut, RiskProfile, SipProjectionOut } from "@/lib/types";
+import { fadeInUp, staggerChildren } from "@/lib/motion";
 import StatCard from "@/components/ui/StatCard";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 import SipGrowthChart from "@/components/charts/SipGrowthChart";
+
+const INPUT = "mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
 function formatRupees(n: number): string {
   return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -76,120 +81,110 @@ function PlanningInner() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Planner</h1>
+    <motion.div initial="hidden" animate="visible" variants={staggerChildren} className="space-y-6">
+      <motion.h1 variants={fadeInUp} className="text-xl font-semibold text-text-primary">
+        Planner
+      </motion.h1>
 
-      <div className="rounded border bg-white p-4">
-        <h2 className="mb-1 font-medium">SIP growth projection</h2>
-        <p className="mb-3 text-sm text-slate-500">
-          How a monthly investment could grow over time, compounded annually.
-        </p>
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          <label className="text-sm">
-            Monthly amount (₹)
-            <input
-              type="number"
-              min={0}
-              value={monthlyAmount}
-              onChange={(e) => setMonthlyAmount(e.target.value === "" ? "" : Number(e.target.value))}
-              className="mt-1 w-full rounded border px-3 py-2"
-            />
-          </label>
-          <label className="text-sm">
-            Years
-            <input
-              type="number"
-              min={1}
-              value={years}
-              onChange={(e) => setYears(e.target.value === "" ? "" : Number(e.target.value))}
-              className="mt-1 w-full rounded border px-3 py-2"
-            />
-          </label>
-          <label className="text-sm">
-            Assumed annual return (%)
-            <input
-              type="number"
-              step={0.1}
-              value={rateInput}
-              onChange={(e) => {
-                setRateTouched(true);
-                setRateInput(e.target.value === "" ? "" : Number(e.target.value));
-              }}
-              className="mt-1 w-full rounded border px-3 py-2"
-            />
-          </label>
-        </div>
-
-        {projectionError && <p className="text-sm text-red-600">{projectionError}</p>}
-
-        {projection && (
-          <div className="space-y-2">
-            <p className="text-xs text-slate-500">
-              {projection.assumed_return
-                ? "No portfolio result yet -- this uses a general, non-guaranteed assumed rate. Not a promise of returns."
-                : "Rate based on your latest portfolio's own expected return (or your override) -- still an estimate, not a guarantee."}
-            </p>
-            <SipGrowthChart points={projection.points} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <StatCard
-                label="Total invested"
-                value={formatRupees(projection.points[projection.points.length - 1].invested_cumulative)}
+      <motion.div variants={fadeInUp}>
+        <Card title="SIP growth projection">
+          <p className="mb-3 text-sm text-text-muted">How a monthly investment could grow over time, compounded annually.</p>
+          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+            <label className="text-sm text-text-primary">
+              Monthly amount (₹)
+              <input
+                type="number"
+                min={0}
+                value={monthlyAmount}
+                onChange={(e) => setMonthlyAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                className={INPUT}
               />
-              <StatCard
-                label="Projected value"
-                value={formatRupees(projection.points[projection.points.length - 1].projected_value)}
+            </label>
+            <label className="text-sm text-text-primary">
+              Years
+              <input type="number" min={1} value={years} onChange={(e) => setYears(e.target.value === "" ? "" : Number(e.target.value))} className={INPUT} />
+            </label>
+            <label className="text-sm text-text-primary">
+              Assumed annual return (%)
+              <input
+                type="number"
+                step={0.1}
+                value={rateInput}
+                onChange={(e) => {
+                  setRateTouched(true);
+                  setRateInput(e.target.value === "" ? "" : Number(e.target.value));
+                }}
+                className={INPUT}
               />
+            </label>
+          </div>
+
+          {projectionError && <p className="text-sm text-negative">{projectionError}</p>}
+
+          {projection && (
+            <div className="space-y-2">
+              <p className="text-xs text-text-muted">
+                {projection.assumed_return
+                  ? "No portfolio result yet — this uses a general, non-guaranteed assumed rate. Not a promise of returns."
+                  : "Rate based on your latest portfolio's own expected return (or your override) — still an estimate, not a guarantee."}
+              </p>
+              <SipGrowthChart points={projection.points} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <StatCard label="Total invested" value={formatRupees(projection.points[projection.points.length - 1].invested_cumulative)} />
+                <StatCard label="Projected value" value={formatRupees(projection.points[projection.points.length - 1].projected_value)} />
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </Card>
+      </motion.div>
 
-      <div className="rounded border bg-white p-4">
-        <h2 className="mb-1 font-medium">Goal calculator</h2>
-        <p className="mb-3 text-sm text-slate-500">How much to invest monthly to reach a target amount.</p>
-        <form onSubmit={onGoalSubmit} className="grid gap-3 sm:grid-cols-3">
-          <label className="text-sm">
-            Target amount (₹)
-            <input
-              type="number"
-              min={0}
-              required
-              value={goalAmount}
-              onChange={(e) => setGoalAmount(e.target.value === "" ? "" : Number(e.target.value))}
-              className="mt-1 w-full rounded border px-3 py-2"
-            />
-          </label>
-          <label className="text-sm">
-            Years
-            <input
-              type="number"
-              min={1}
-              required
-              value={goalYears}
-              onChange={(e) => setGoalYears(e.target.value === "" ? "" : Number(e.target.value))}
-              className="mt-1 w-full rounded border px-3 py-2"
-            />
-          </label>
-          <div className="flex items-end">
-            <Button disabled={goalLoading} type="submit" className="w-full">
-              {goalLoading ? "Computing..." : "Calculate"}
-            </Button>
-          </div>
-        </form>
+      <motion.div variants={fadeInUp}>
+        <Card title="Goal calculator">
+          <p className="mb-3 text-sm text-text-muted">How much to invest monthly to reach a target amount.</p>
+          <form onSubmit={onGoalSubmit} className="grid gap-3 sm:grid-cols-3">
+            <label className="text-sm text-text-primary">
+              Target amount (₹)
+              <input
+                type="number"
+                min={0}
+                required
+                value={goalAmount}
+                onChange={(e) => setGoalAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                className={INPUT}
+              />
+            </label>
+            <label className="text-sm text-text-primary">
+              Years
+              <input
+                type="number"
+                min={1}
+                required
+                value={goalYears}
+                onChange={(e) => setGoalYears(e.target.value === "" ? "" : Number(e.target.value))}
+                className={INPUT}
+              />
+            </label>
+            <div className="flex items-end">
+              <Button disabled={goalLoading} loading={goalLoading} type="submit" className="w-full">
+                {goalLoading ? "Computing..." : "Calculate"}
+              </Button>
+            </div>
+          </form>
 
-        {goalError && <p className="mt-2 text-sm text-red-600">{goalError}</p>}
+          {goalError && <p className="mt-2 text-sm text-negative">{goalError}</p>}
 
-        {goalResult && (
-          <div className="mt-4 space-y-1">
-            <StatCard label="Required monthly SIP" value={formatRupees(goalResult.required_monthly_sip)} />
-            <p className="text-xs text-slate-500">
-              Assumes {goalResult.annual_rate_pct.toFixed(1)}% annual return
-              {goalResult.assumed_return ? " (general assumption, not a promise)" : " (from your latest portfolio)"}.
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
+          {goalResult && (
+            <div className="mt-4 space-y-1">
+              <StatCard label="Required monthly SIP" value={formatRupees(goalResult.required_monthly_sip)} />
+              <p className="text-xs text-text-muted">
+                Assumes {goalResult.annual_rate_pct.toFixed(1)}% annual return
+                {goalResult.assumed_return ? " (general assumption, not a promise)" : " (from your latest portfolio)"}.
+              </p>
+            </div>
+          )}
+        </Card>
+      </motion.div>
+    </motion.div>
   );
 }
 

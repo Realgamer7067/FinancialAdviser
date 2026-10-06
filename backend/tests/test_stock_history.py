@@ -23,7 +23,7 @@ async def _seed_candles(db_session, symbol="TESTCO", days=10):
                 low=99 + i,
                 close=100 + i,
                 volume=1000,
-                source="test_fixture",
+                source="demo_seed",  # matches _force_hermetic_settings' demo_mode=True
                 retrieved_at=now,
             )
         )
@@ -42,6 +42,21 @@ async def test_history_returns_points_in_ascending_order(client, db_session):
     assert len(body["points"]) == 5
     timestamps = [p["timestamp"] for p in body["points"]]
     assert timestamps == sorted(timestamps)
+
+
+async def test_history_points_round_trip_full_ohlcv(client, db_session):
+    # Phase 0B #2: PriceHistoryPoint used to expose only timestamp/close --
+    # candlestick charting needs open/high/low/volume too, all already stored
+    # on MarketCandle.
+    await _seed_candles(db_session, symbol="TESTCO3", days=1)
+
+    res = await client.get("/api/stocks/TESTCO3/history")
+    point = res.json()["points"][0]
+    assert point["open"] == 100
+    assert point["high"] == 101
+    assert point["low"] == 99
+    assert point["close"] == 100
+    assert point["volume"] == 1000
 
 
 async def test_history_days_param_clamps_to_valid_range(client, db_session):

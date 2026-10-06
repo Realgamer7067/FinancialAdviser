@@ -1,18 +1,18 @@
 "use client";
 
-export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+import { AlertCircle } from "lucide-react";
+import Button from "@/components/ui/Button";
+import EmptyState from "@/components/ui/EmptyState";
+
+export default function GlobalError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <div className="mx-auto max-w-sm space-y-4 text-center">
-      <h1 className="text-xl font-semibold">Something went wrong</h1>
-      <p className="text-sm text-slate-500">
-        An unexpected error occurred while rendering this page. Retrying usually resolves it.
-      </p>
-      <button
-        onClick={reset}
-        className="rounded bg-brand-600 px-4 py-2 text-white hover:bg-brand-700"
-      >
-        Try again
-      </button>
+      <EmptyState
+        icon={AlertCircle}
+        title="Something went wrong"
+        message="An unexpected error occurred while rendering this page. Retrying usually resolves it."
+      />
+      <Button onClick={reset}>Try again</Button>
     </div>
   );
 }

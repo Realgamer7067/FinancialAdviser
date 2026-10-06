@@ -1,0 +1,61 @@
+{
+  "dates": 47,
+  "first": "2022-10-31",
+  "last": "2026-08-31",
+  "top_n": 10,
+  "side_cost": 0.003,
+  "eligible_per_date_median": 614.0,
+  "strategies": {
+    "momentum": {
+      "net_mean_monthly": 0.03583,
+      "gross_mean_monthly": 0.03861,
+      "avg_turnover": 0.472,
+      "net_excess_over_universe_monthly": 0.01378,
+      "excess_ci95": [
+        -0.00222,
+        0.03031
+      ],
+      "months_beating_universe": "29 of 47"
+    },
+    "liquidity": {
+      "net_mean_monthly": 0.00116,
+      "gross_mean_monthly": 0.00285,
+      "avg_turnover": 0.291,
+      "net_excess_over_universe_monthly": -0.0209,
+      "excess_ci95": [
+        -0.03085,
+        -0.01038
+      ],
+      "months_beating_universe": "12 of 47"
+    }
+  },
+  "universe_mean_monthly": 0.02206,
+  "momentum_minus_liquidity": {
+    "mean_monthly": 0.03467,
+    "ci95": [
+      0.01419,
+      0.05508
+    ]
+  },
+  "panel": {
+    "securities": 697,
+    "sessions": 1240,
+    "first": "2021-10-04",
+    "last": "2026-10-01",
+    "data_marker": "697:1240:2026-10-01:0:total-return-v1",
+    "dividends": {
+      "dividends_applied": 3755,
+      "needs_review": 8,
+      "uncertain_scaling": 0,
+      "outside_range": 8
+    }
+  },
+  "caveats": [
+    "Survivorship: the universe is today's listed stocks with enough history, so names that were delisted, merged or dropped are absent and winners are over-represented, which flatters momentum.",
+    "Returns are TOTAL return (split/bonus-adjusted price plus scaled cash dividends); the study-v1 note that dividends are missing does not apply to this run.",
+    "Only about five years, one market regime, 47 monthly observations: only large effects are detectable, and the interval on the momentum excess includes zero.",
+    "The baseline is a pure liquidity ordering of the whole listed universe (the 10 most traded by rupees), a proxy for the old selection, which picked the most traded Nifty 50 stock per sector; it is not the identical rule.",
+    "Only the momentum component can be tested here: value and quality need point-in-time fundamentals, which this project does not have, so the composite as a whole is UNTESTED.",
+    "Top-10 equal weight with a 0.3% cost on each side of every change; real fills, taxes and market impact are not modelled."
+  ]
+}

@@ -48,6 +48,7 @@ class CandidateScore(Base, UUIDPKMixin):
     model_agreement: Mapped[float] = mapped_column(Float)  # 0..1, Section 51
     data_quality: Mapped[float] = mapped_column(Float)  # 0..1, Section 19
     confidence: Mapped[float] = mapped_column(Float)  # 0..1, derived (Section 19)
+    confidence_band: Mapped[str | None] = mapped_column(String, nullable=True)  # mirrors Recommendation
 
 
 class CouncilOutput(Base, UUIDPKMixin):

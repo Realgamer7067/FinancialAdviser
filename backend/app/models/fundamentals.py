@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, String, Uuid
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -39,10 +39,27 @@ class FundamentalMetrics(Base, UUIDPKMixin):
     pb: Mapped[float | None] = mapped_column(Float, nullable=True)
     ev_ebitda: Mapped[float | None] = mapped_column(Float, nullable=True)
     dividend_yield: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # See app/providers/base.py::FundamentalSnapshot for why these are two
+    # separate fields, not one -- different metrics from different disclosure
+    # regimes (docs/V2-RETHINK.md P1).
+    insider_holding_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     promoter_holding: Mapped[float | None] = mapped_column(Float, nullable=True)
     promoter_pledging: Mapped[float | None] = mapped_column(Float, nullable=True)
     institutional_ownership: Mapped[float | None] = mapped_column(Float, nullable=True)
     market_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Annual statements for ONE fiscal year (same period end), so accruals / cash profitability / FCF yield never mix a trailing and an annual figure.
+    annual_period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    total_assets: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_assets_prior: Mapped[float | None] = mapped_column(Float, nullable=True)
+    annual_net_income: Mapped[float | None] = mapped_column(Float, nullable=True)
+    annual_operating_cash_flow: Mapped[float | None] = mapped_column(Float, nullable=True)
+    annual_capex: Mapped[float | None] = mapped_column(Float, nullable=True)
+    annual_free_cash_flow: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # NSE's own quarterly filings, summed over four quarters: a cross-check on `eps`, never a replacement.
+    nse_eps_ttm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    nse_period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    nse_quarters: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     source: Mapped[str] = mapped_column(String)  # e.g. "nifty50_seed_dataset_v1"
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

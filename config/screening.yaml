@@ -17,4 +17,12 @@ technical_screen:
 candidate_limits:
   after_fundamental_technical_screen: 40
   after_kronos_news: 15
-  final_council_input: 10
+  # Raised 3 -> 8 (2026-09-16): with only 3 candidates reaching the council/
+  # portfolio-optimizer stage, every candidate hit the same max_single_weight
+  # cap (moderate risk profile = 0.25), producing a flat equal-split
+  # allocation and a "sector concentration" chart that trivially duplicated
+  # the per-stock chart (3 stocks, 3 different sectors, no overlap possible).
+  # 8 candidates gives the MVO solver room to actually differentiate weights
+  # and gives the user real choice among diversified names, not just
+  # whichever 3 happened to rank highest.
+  final_council_input: 8

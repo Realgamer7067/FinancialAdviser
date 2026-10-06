@@ -2,6 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens (v2) -- indigo accent + dark sidebar, replacing the v1 green
+   "generic fintech" palette. Values are space-separated RGB triples so
+   Tailwind's rgb(var(--x) / <alpha-value>) pattern can apply opacity
+   modifiers. Light mode only. */
+:root {
+  --color-bg: 248 250 252;
+  --color-surface: 255 255 255;
+  --color-border: 226 232 240;
+  --color-text-primary: 15 23 42;
+  --color-text-muted: 100 116 139;
+
+  --color-accent: 79 70 229;
+  --color-accent-hover: 67 56 202;
+  --color-accent-subtle: 238 242 255;
+
+  /* Semantic (gain/loss/caution) colors stay green/red/amber regardless of
+     brand accent -- they encode market meaning, not brand identity. */
+  --color-positive: 4 120 87;
+  --color-positive-subtle: 236 253 245;
+  --color-negative: 220 38 38;
+  --color-negative-subtle: 254 242 242;
+  --color-warning: 180 83 9;
+  --color-warning-subtle: 255 251 235;
+
+  /* Dark sidebar -- deliberately a different surface from the light content
+     area for contrast/hierarchy, indigo-tinted to match the accent rather
+     than a neutral black. */
+  --color-sidebar-bg: 30 27 75;
+  --color-sidebar-hover: 49 46 129;
+  --color-sidebar-text: 199 210 254;
+  --color-sidebar-text-muted: 148 163 184;
+  --color-sidebar-active-text: 255 255 255;
+  --color-sidebar-border: 49 46 129;
+}
+
 body {
-  @apply bg-slate-50 text-slate-900;
+  @apply bg-bg text-text-primary antialiased;
+}
+
+/* Distinct display typeface for headings -- applied globally rather than
+   per-component so Card's `title` prop (an h3) picks it up automatically. */
+h1, h2, h3, h4 {
+  font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }

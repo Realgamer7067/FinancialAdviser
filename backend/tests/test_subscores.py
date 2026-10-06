@@ -7,6 +7,7 @@ from app.scoring.subscores import (
     risk_fit_score,
     risk_tier,
     risk_tier_score,
+    risk_tier_score_with_breakdown,
     technical_score,
 )
 
@@ -46,18 +47,33 @@ def test_technical_score_bounds_clip_at_100():
     assert score is not None and 0 <= score <= 100
 
 
+def _kronos_ev(direction, predicted_return, confidence, direction_agreement=0.9):
+    return KronosEvidence(
+        forecast_horizon="30d",
+        direction=direction,
+        predicted_return=predicted_return,
+        predicted_return_p10=predicted_return - 0.02,
+        predicted_return_p90=predicted_return + 0.02,
+        direction_agreement=direction_agreement,
+        sample_count=8,
+        confidence=confidence,
+    )
+
+
 def test_kronos_score_bullish_forecast_above_baseline():
-    ev = KronosEvidence(forecast_horizon="30d", direction="bullish", predicted_return=0.05, confidence=0.8)
+    ev = _kronos_ev("bullish", 0.05, 0.8)
     assert kronos_score(ev) > 50
 
 
-def test_kronos_score_neutral_forecast_at_baseline():
-    ev = KronosEvidence(forecast_horizon="30d", direction="neutral", predicted_return=0.0, confidence=0.5)
-    assert kronos_score(ev) == 50
+def test_kronos_score_neutral_forecast_is_none():
+    # A neutral call is "no directional evidence," not "evidence of no
+    # movement" -- must be excluded, not silently contribute the midpoint (50).
+    ev = _kronos_ev("neutral", 0.0, 0.5)
+    assert kronos_score(ev) is None
 
 
 def test_kronos_score_bearish_forecast_below_baseline():
-    ev = KronosEvidence(forecast_horizon="30d", direction="bearish", predicted_return=-0.06, confidence=0.9)
+    ev = _kronos_ev("bearish", -0.06, 0.9)
     assert kronos_score(ev) < 50
 
 
@@ -68,7 +84,14 @@ def test_kronos_score_none_when_no_forecast():
 def test_kronos_score_none_when_confidence_too_low():
     # A near-zero-confidence forecast must be excluded like any other missing
     # signal, not silently contribute the neutral midpoint (50) as if real.
-    ev = KronosEvidence(forecast_horizon="30d", direction="bullish", predicted_return=0.05, confidence=0.05)
+    ev = _kronos_ev("bullish", 0.05, 0.05)
+    assert kronos_score(ev) is None
+
+
+def test_kronos_score_none_when_confidence_uncalibrated():
+    # No calibration table exists yet for this (model_version, horizon,
+    # direction_agreement bucket) -- must be excluded, never guessed.
+    ev = _kronos_ev("bullish", 0.05, None)
     assert kronos_score(ev) is None
 
 
@@ -111,6 +134,26 @@ def test_risk_tier_score_none_when_fewer_than_min_inputs():
     ev = TechnicalEvidence(rsi_14=50, trend="neutral", volatility_30d=0.30, drawdown_1y=None, macd_hist=None, beta=None)
     assert risk_tier_score(ev, None) is None
     assert risk_tier(ev, None) is None
+
+
+def test_risk_tier_score_with_breakdown_none_when_fewer_than_min_inputs():
+    ev = TechnicalEvidence(rsi_14=50, trend="neutral", volatility_30d=0.30, drawdown_1y=None, macd_hist=None, beta=None)
+    score, breakdown = risk_tier_score_with_breakdown(ev, None)
+    assert score is None
+    assert breakdown is None
+
+
+def test_risk_tier_score_with_breakdown_matches_plain_score_and_exposes_parts():
+    technical_ev = TechnicalEvidence(
+        rsi_14=50, trend="neutral", volatility_30d=0.10, drawdown_1y=-0.05, macd_hist=0, beta=0.5
+    )
+    fundamental_ev = FundamentalEvidence(
+        roe=0.15, revenue_growth=0.1, debt_to_equity=0.3, pe=20, net_margin=0.1, promoter_pledging=None
+    )
+    score, breakdown = risk_tier_score_with_breakdown(technical_ev, fundamental_ev)
+    assert score == risk_tier_score(technical_ev, fundamental_ev)
+    assert set(breakdown.keys()) == {"volatility_30d", "drawdown_1y", "beta", "debt_to_equity"}
+    assert all(0 <= v <= 100 for v in breakdown.values())
 
 
 def test_risk_tier_low_signals_across_the_board_is_safer():

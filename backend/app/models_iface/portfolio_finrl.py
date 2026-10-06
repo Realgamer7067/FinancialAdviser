@@ -85,12 +85,16 @@ class FinRLDRLPortfolioModel(PortfolioModel):
         candidate_weights = {s: full_weights[s] for s in candidates}
         total = sum(candidate_weights.values()) or 1.0
         capped = {s: min(w / total, max_single_weight) for s, w in candidate_weights.items()}
-        cap_total = sum(capped.values()) or 1.0
-        allocations = {s: round(w / cap_total, 4) for s, w in capped.items() if w / cap_total > 0.001}
+        # Do NOT renormalize capped weights back up to sum to 1 -- dividing by
+        # their (now-smaller) sum would re-inflate exactly the weights the cap
+        # just constrained, silently violating it again (Section 20). Leftover
+        # is explicit unallocated cash instead.
+        allocations = {s: round(w, 4) for s, w in capped.items() if w > 0.001}
 
         return PortfolioAllocationResult(
             method="finrl_drl",
             allocations=allocations,
+            unallocated_cash=max(0.0, 1.0 - sum(allocations.values())),
             expected_return=None,
             expected_volatility=None,
             sharpe=None,

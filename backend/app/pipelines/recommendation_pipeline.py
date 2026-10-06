@@ -8,10 +8,12 @@ PyPortfolioOpt produce evidence; Qwen only synthesizes evidence it's handed.
 """
 
 import asyncio
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+import pandas as pd
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import screening_config, settings
@@ -29,8 +31,27 @@ from app.models_iface.finbert import FinBERTModel
 from app.models_iface.kronos import KronosModel
 from app.models_iface.llm import LLMProvider, QwenOpenAICompatibleProvider
 from app.models_iface.portfolio_mvo import MeanVariancePortfolioModel
+from app.pipelines.progress import (
+    STAGE_COUNCIL_EVALUATION,
+    STAGE_COUNCIL_SETUP,
+    STAGE_FETCHING_MARKET_DATA,
+    STAGE_FINALIZING,
+    STAGE_KRONOS_FORECAST,
+    STAGE_LOADING_PROFILE,
+    STAGE_MARKET_REGIME,
+    STAGE_NEWS_INGESTION,
+    STAGE_PLANNER,
+    STAGE_PORTFOLIO_OPTIMIZATION,
+    STAGE_PRELIM_SCORING,
+    STAGE_SCREENING,
+    STAGE_SYNCING_INSTRUMENTS,
+    JobProgressTracker,
+)
+from app.pipelines.publication import verify_ownership
+from app.services.manifest import record_manifest_entry
 from app.providers.base import Candle, FundamentalDataProvider, FundamentalSnapshot, MarketDataProvider
 from app.providers.factory import get_fundamental_provider, get_market_data_provider
+from app.providers.mode import expected_candle_source, expected_fundamentals_source
 from app.providers.nifty50_seed import NIFTY50_SEED
 from app.providers.rss_news import RSSNewsProvider
 from app.risk.gate import apply_risk_gate
@@ -51,6 +72,7 @@ from app.scoring.subscores import (
     portfolio_score as calc_portfolio_score,
     risk_fit_score as calc_risk_fit_score,
     risk_tier as calc_risk_tier,
+    risk_tier_score_with_breakdown as calc_risk_tier_score_with_breakdown,
     technical_score as calc_technical_score,
     volatility_band,
 )
@@ -134,13 +156,21 @@ async def _get_cached_candles(db: AsyncSession, instrument_id: UUID) -> list[Can
     rows = (
         await db.execute(
             select(MarketCandle)
-            .where(MarketCandle.instrument_id == instrument_id, MarketCandle.interval == "1d")
+            .where(
+                MarketCandle.instrument_id == instrument_id,
+                MarketCandle.interval == "1d",
+                MarketCandle.source == expected_candle_source(),
+                MarketCandle.superseded_at.is_(None),
+            )
             .order_by(MarketCandle.timestamp)
         )
     ).scalars().all()
     if not rows:
         return None
-    if (date.today() - rows[-1].timestamp.date()).days > CANDLE_STALENESS_TOLERANCE_DAYS:
+    tolerance_days = settings.market_data_staleness_override_days
+    if tolerance_days is None:
+        tolerance_days = CANDLE_STALENESS_TOLERANCE_DAYS
+    if (date.today() - rows[-1].timestamp.date()).days > tolerance_days:
         return None
     return [
         Candle(
@@ -152,6 +182,7 @@ async def _get_cached_candles(db: AsyncSession, instrument_id: UUID) -> list[Can
             volume=r.volume,
             source=r.source,
             retrieved_at=r.retrieved_at,
+            adjusted=r.adjusted,
         )
         for r in rows
     ]
@@ -177,7 +208,90 @@ async def _fetch_candles(
 
 
 async def _persist_candles(db: AsyncSession, instrument_id: UUID, candles: list[Candle]) -> None:
-    for c in candles:
+    """A fresh fetch always re-pulls the FULL history window (HISTORY_DAYS),
+    not just missing days -- inserting it on top of existing rows without
+    clearing the overlap first duplicates every overlapping session
+    (docs/V2-RETHINK.md P0). A refresh must not, however, HARD DELETE prior
+    rows: a published Recommendation's evidence can reference technicals
+    computed from a specific historical candle set, and once deleted that
+    set can never be reconstructed (V3 Phase 02, docs/v3-execution/phase-02.md).
+
+    So instead of deleting the overlap, this soft-supersedes it: rows whose
+    (instrument, interval, timestamp, source) key is about to be replaced by
+    genuinely different data get `superseded_at` stamped (kept, but excluded
+    from every "current" read by the partial unique index / read-path
+    filters), and the new data is inserted fresh under a shared
+    `import_batch_id`. Candles that are byte-identical to what's already
+    stored as the current row are left untouched entirely, so re-importing
+    the same window twice in a row is a no-op rather than a supersede-churn
+    loop.
+    """
+    if not candles:
+        return
+    sources = {c.source for c in candles}
+
+    def _norm_ts(ts: datetime) -> datetime:
+        # SQLite's DateTime(timezone=True) round-trips a tz-aware value as a
+        # naive one (the offset isn't persisted), so a freshly-constructed
+        # Candle.timestamp (aware) and a MarketCandle.timestamp read back
+        # from the DB (naive) compare unequal -- and hash differently -- even
+        # when they represent the same instant. Normalize both sides to
+        # naive UTC before using them as comparison/dict keys so the diff
+        # below isn't fooled by that round-trip into treating unchanged rows
+        # as new.
+        if ts.tzinfo is not None:
+            ts = ts.astimezone(timezone.utc)
+        return ts.replace(tzinfo=None)
+
+    existing_rows = (
+        await db.execute(
+            select(MarketCandle).where(
+                MarketCandle.instrument_id == instrument_id,
+                MarketCandle.interval == "1d",
+                MarketCandle.source.in_(sources),
+                MarketCandle.superseded_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    existing_by_key = {(r.source, _norm_ts(r.timestamp)): r for r in existing_rows}
+
+    def _unchanged(row: MarketCandle, c: Candle) -> bool:
+        return (
+            row.open == c.open
+            and row.high == c.high
+            and row.low == c.low
+            and row.close == c.close
+            and row.volume == c.volume
+        )
+
+    to_insert = [
+        c
+        for c in candles
+        if (c.source, _norm_ts(c.timestamp)) not in existing_by_key
+        or not _unchanged(existing_by_key[(c.source, _norm_ts(c.timestamp))], c)
+    ]
+    if not to_insert:
+        return  # every incoming candle matches what's already the current row -- idempotent no-op
+
+    now = datetime.now(timezone.utc)
+    supersede_keys = [
+        (c.source, _norm_ts(c.timestamp)) for c in to_insert if (c.source, _norm_ts(c.timestamp)) in existing_by_key
+    ]
+    if supersede_keys:
+        supersede_ids = [existing_by_key[key].id for key in supersede_keys]
+        await db.execute(
+            update(MarketCandle)
+            .where(
+                MarketCandle.instrument_id == instrument_id,
+                MarketCandle.interval == "1d",
+                MarketCandle.superseded_at.is_(None),
+                MarketCandle.id.in_(supersede_ids),
+            )
+            .values(superseded_at=now)
+        )
+
+    batch_id = uuid.uuid4()
+    for c in to_insert:
         db.add(
             MarketCandle(
                 instrument_id=instrument_id,
@@ -190,6 +304,8 @@ async def _persist_candles(db: AsyncSession, instrument_id: UUID, candles: list[
                 volume=c.volume,
                 source=c.source,
                 retrieved_at=c.retrieved_at,
+                import_batch_id=batch_id,
+                adjusted=c.adjusted,
             )
         )
     await db.flush()
@@ -203,11 +319,18 @@ async def _get_cached_fundamentals(db: AsyncSession, instrument: Instrument) -> 
     yfinance `.info` is a single unofficial, rate-limited endpoint hit once per
     symbol per pipeline run; without this every run re-fetches all ~50 symbols
     regardless of how recently the last run fetched them."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.fundamentals_cache_ttl_hours)
+    ttl_hours = settings.fundamentals_staleness_override_hours
+    if ttl_hours is None:
+        ttl_hours = settings.fundamentals_cache_ttl_hours
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=ttl_hours)
     row = (
         await db.execute(
             select(FundamentalMetrics)
-            .where(FundamentalMetrics.instrument_id == instrument.id, FundamentalMetrics.retrieved_at >= cutoff)
+            .where(
+                FundamentalMetrics.instrument_id == instrument.id,
+                FundamentalMetrics.retrieved_at >= cutoff,
+                FundamentalMetrics.source == expected_fundamentals_source(),
+            )
             .order_by(FundamentalMetrics.retrieved_at.desc())
             .limit(1)
         )
@@ -239,6 +362,7 @@ async def _get_cached_fundamentals(db: AsyncSession, instrument: Instrument) -> 
         pb=row.pb,
         ev_ebitda=row.ev_ebitda,
         dividend_yield=row.dividend_yield,
+        insider_holding_pct=row.insider_holding_pct,
         promoter_holding=row.promoter_holding,
         promoter_pledging=row.promoter_pledging,
         institutional_ownership=row.institutional_ownership,
@@ -285,6 +409,7 @@ async def _fetch_fundamentals(
             pb=snapshot.pb,
             ev_ebitda=snapshot.ev_ebitda,
             dividend_yield=snapshot.dividend_yield,
+            insider_holding_pct=snapshot.insider_holding_pct,
             promoter_holding=snapshot.promoter_holding,
             promoter_pledging=snapshot.promoter_pledging,
             institutional_ownership=snapshot.institutional_ownership,
@@ -433,39 +558,72 @@ async def _aggregate_news_sentiment(db: AsyncSession, symbol: str, instrument_id
     )
     db.add(finbert_row)
     await db.flush()
-    return {"sentiment": sentiment_score, "confidence": avg_confidence, "article_count": len(matching)}
+
+    # Give the council real articles to inspect, not just a folded-in number
+    # (docs/V2-RETHINK.md P1/section 4). Ranked by importance*relevance --
+    # already-computed FinBERT fields, no new data acquisition needed.
+    top_matching = sorted(matching, key=lambda pair: pair[0].importance * pair[0].relevance, reverse=True)[:5]
+    recent_articles = [
+        {
+            "headline": news.title,
+            "url": news.url,
+            "event_type": analysis.event_type,
+            "sentiment": analysis.sentiment,
+            "published_at": news.published_at.isoformat(),
+        }
+        for analysis, news in top_matching
+    ]
+    return {
+        "sentiment": sentiment_score,
+        "confidence": avg_confidence,
+        "article_count": len(matching),
+        "recent_articles": recent_articles,
+    }
 
 
 # --------------------------------------------------------------- kronos ----
 
 
 async def _kronos_forecast(
-    db: AsyncSession, kronos: KronosModel, instrument: Instrument, candles: list[Candle]
+    db: AsyncSession, kronos: KronosModel, instrument: Instrument, candles: list[Candle], horizon: str = "30d"
 ) -> dict | None:
-    forecast = await kronos.forecast(instrument.symbol, candles, "30d")
+    forecast = await kronos.forecast(instrument.symbol, candles, horizon)
     if forecast is None:
         return None
+    generated_at = datetime.now(timezone.utc)
     db.add(
         KronosPrediction(
             instrument_id=instrument.id,
             forecast_horizon=forecast.forecast_horizon,
             direction=forecast.direction,
             predicted_return=forecast.predicted_return,
+            predicted_return_p10=forecast.predicted_return_p10,
+            predicted_return_p90=forecast.predicted_return_p90,
+            direction_agreement=forecast.direction_agreement,
+            sample_count=forecast.sample_count,
             confidence=forecast.confidence,
             input_timeframe=forecast.input_timeframe,
             model_name=forecast.model_name,
             model_version=forecast.model_version,
-            generated_at=datetime.now(timezone.utc),
+            generated_at=generated_at,
         )
     )
     await db.flush()
-    return forecast.model_dump()
+    # `TimeSeriesForecast` (the pydantic schema `forecast` is) has no
+    # generated_at field of its own -- it's assigned here, at persistence
+    # time. The manifest (V3 Phase 02) needs it, so it's added into the
+    # dict explicitly rather than silently being absent from model_dump().
+    return {**forecast.model_dump(), "generated_at": generated_at}
 
 
 # ------------------------------------------------------------- pipeline ----
 
 
-async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: UUID | None = None) -> CouncilRun:
+async def run_recommendation_pipeline(
+    db: AsyncSession, user_id: UUID, job_id: UUID | None = None, worker_token: str | None = None
+) -> CouncilRun:
+    progress = JobProgressTracker(job_id, worker_token=worker_token)
+    await progress.set_stage(STAGE_LOADING_PROFILE)
     user_profile, risk_profile = await _load_user_context(db, user_id)
     user_profile_payload = {
         "risk_profile": risk_profile.risk_profile,
@@ -486,8 +644,10 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
     portfolio_model = MeanVariancePortfolioModel()
     screen_cfg = screening_config()
 
+    await progress.set_stage(STAGE_SYNCING_INSTRUMENTS)
     instruments = await _sync_instruments(db)
 
+    await progress.set_stage(STAGE_MARKET_REGIME)
     nifty_candles, _ = await _fetch_candles(db, market_provider, None, "NIFTY50")
     vix_quote = None
     try:
@@ -500,7 +660,10 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
     fundamentals_by_symbol: dict[str, FundamentalSnapshot | None] = {}
     technicals_by_symbol: dict[str, dict] = {}
 
-    for seed in NIFTY50_SEED:
+    for i, seed in enumerate(NIFTY50_SEED):
+        await progress.set_stage(
+            STAGE_FETCHING_MARKET_DATA, current_symbol=seed.symbol, index=i, total=len(NIFTY50_SEED)
+        )
         instrument = instruments[seed.symbol]
         candles, from_cache = await _fetch_candles(db, market_provider, instrument.id, seed.symbol)
         candles_by_symbol[seed.symbol] = candles
@@ -517,46 +680,62 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
         await asyncio.sleep(INTER_SYMBOL_DELAY_SECONDS)
     await db.flush()
 
-    stage1 = [
+    await progress.set_stage(STAGE_SCREENING)
+    passing_screen = [
         s.symbol
         for s in NIFTY50_SEED
         if _passes_screen(
             fundamentals_by_symbol[s.symbol], technicals_by_symbol[s.symbol], candles_by_symbol[s.symbol], screen_cfg
         )
-    ][: screen_cfg["candidate_limits"]["after_fundamental_technical_screen"]]
+    ]
+    # Rank by fundamental+technical quality BEFORE truncating -- truncating in
+    # NIFTY50_SEED's arbitrary listing order meant the top `after_...` slice
+    # was whichever symbols happen to sit first in the seed file, not the
+    # best-screening ones, and the expensive Kronos/news work below only ever
+    # ran on that arbitrary subset (docs/V2-RETHINK.md P1).
+    stage1 = sorted(
+        passing_screen,
+        key=lambda s: _prelim_score(s, fundamentals_by_symbol, technicals_by_symbol),
+        reverse=True,
+    )[: screen_cfg["candidate_limits"]["after_fundamental_technical_screen"]]
 
+    await progress.set_stage(STAGE_NEWS_INGESTION)
     await _ingest_news(db, news_provider, finbert)
 
     kronos_by_symbol: dict[str, dict | None] = {}
     news_by_symbol: dict[str, dict | None] = {}
-    for symbol in stage1:
+    for i, symbol in enumerate(stage1):
+        await progress.set_stage(STAGE_KRONOS_FORECAST, current_symbol=symbol, index=i, total=len(stage1))
         instrument = instruments[symbol]
         kronos_by_symbol[symbol] = await _kronos_forecast(db, kronos, instrument, candles_by_symbol[symbol])
         news_by_symbol[symbol] = await _aggregate_news_sentiment(db, symbol, instrument.id)
 
-    def _prelim_score(symbol: str) -> float:
-        parts = []
-        f = calc_fundamental_score(_to_fundamental_evidence(fundamentals_by_symbol[symbol]))
-        t = calc_technical_score(_to_technical_evidence(technicals_by_symbol[symbol]))
-        for v in (f, t):
-            if v is not None:
-                parts.append(v)
-        return sum(parts) / len(parts) if parts else 0.0
+    await progress.set_stage(STAGE_PRELIM_SCORING)
 
-    stage2 = sorted(stage1, key=_prelim_score, reverse=True)[
-        : screen_cfg["candidate_limits"]["after_kronos_news"]
-    ]
+    stage2 = sorted(
+        stage1, key=lambda s: _prelim_score(s, fundamentals_by_symbol, technicals_by_symbol), reverse=True
+    )[: screen_cfg["candidate_limits"]["after_kronos_news"]]
     final_candidates = stage2[: screen_cfg["candidate_limits"]["final_council_input"]]
 
+    # ---- extra Kronos horizons for the final candidates only (Phase 0B #4) ----
+    # The 30d forecast above (inside the stage1 loop, up to 40 symbols) is what
+    # scoring consumes and stays as-is. 7d/90d are only useful for the handful
+    # of stocks that actually reach the council, so fetch them here instead of
+    # widening the 40-symbol loop (which would be 3x the Kronos inference cost
+    # for horizons nothing downstream of this block reads).
+    for symbol in final_candidates:
+        instrument = instruments[symbol]
+        for horizon in ("7d", "90d"):
+            await _kronos_forecast(db, kronos, instrument, candles_by_symbol[symbol], horizon=horizon)
+
+    await progress.set_stage(STAGE_PORTFOLIO_OPTIMIZATION)
     # ---- portfolio optimization across final candidates ----
     candidate_returns = {}
     for symbol in final_candidates:
         candles = candles_by_symbol[symbol]
         if len(candles) < 30:
             continue
-        closes = [c.close for c in candles]
-        returns = [(closes[i] - closes[i - 1]) / closes[i - 1] for i in range(1, len(closes))]
-        candidate_returns[symbol] = returns
+        candidate_returns[symbol] = _candles_to_return_series(candles)
 
     max_single_weight = _max_single_weight_for(risk_profile.risk_profile)
 
@@ -569,6 +748,7 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
                 method=allocation.method,
                 candidate_symbols=list(candidate_returns.keys()),
                 allocations=allocation.allocations,
+                unallocated_cash=allocation.unallocated_cash,
                 expected_return=allocation.expected_return,
                 expected_volatility=allocation.expected_volatility,
                 sharpe=allocation.sharpe,
@@ -580,6 +760,7 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
         except NotImplementedModel:
             portfolio_result = None
 
+    await progress.set_stage(STAGE_COUNCIL_SETUP)
     council_run = CouncilRun(
         user_id=user_id,
         job_id=job_id,
@@ -595,6 +776,7 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
     db.add(council_run)
     await db.flush()
 
+    await progress.set_stage(STAGE_PLANNER)
     planner_result = await run_planner(llm, user_profile_payload, market_regime)
     plan_content = planner_result.content if planner_result else {}
     council_run.plan = plan_content
@@ -612,8 +794,12 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
             )
         )
 
-    for symbol in final_candidates:
-        await _evaluate_candidate(
+    recommendation_labels: dict[str, str] = {}
+    for i, symbol in enumerate(final_candidates):
+        await progress.set_stage(
+            STAGE_COUNCIL_EVALUATION, current_symbol=symbol, index=i, total=len(final_candidates)
+        )
+        recommendation_labels[symbol] = await _evaluate_candidate(
             db=db,
             llm=llm,
             council_run=council_run,
@@ -631,6 +817,37 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
             market_regime=market_regime["market_regime"],
         )
 
+    await progress.set_stage(STAGE_FINALIZING)
+    # An excluded (NO_RECOMMENDATION) stock must never receive a published
+    # allocation -- the preliminary `portfolio_result` above was built before
+    # the risk gate ran and may still include rejected symbols. Rebuild the
+    # allocation from only the accepted symbols before publishing (Section
+    # 20: risk gate rejection must be final, not overridden downstream).
+    accepted_symbols = [s for s in final_candidates if recommendation_labels.get(s) != "NO_RECOMMENDATION"]
+    rejected_symbols_in_allocation = (
+        set(portfolio_result.allocations) - set(accepted_symbols) if portfolio_result else set()
+    )
+    if portfolio_result and rejected_symbols_in_allocation:
+        accepted_returns = {s: candidate_returns[s] for s in accepted_symbols if s in candidate_returns}
+        if accepted_returns:
+            allocation = await portfolio_model.optimize(accepted_returns, RISK_FREE_RATE, max_single_weight)
+            portfolio_result = PortfolioResult(
+                user_id=user_id,
+                method=allocation.method,
+                candidate_symbols=list(accepted_returns.keys()),
+                allocations=allocation.allocations,
+                unallocated_cash=allocation.unallocated_cash,
+                expected_return=allocation.expected_return,
+                expected_volatility=allocation.expected_volatility,
+                sharpe=allocation.sharpe,
+                model_version=allocation.model_version,
+                generated_at=datetime.now(timezone.utc),
+            )
+            db.add(portfolio_result)
+            await db.flush()
+        else:
+            portfolio_result = None
+
     if portfolio_result:
         db.add(
             PortfolioRecommendation(
@@ -645,6 +862,15 @@ async def run_recommendation_pipeline(db: AsyncSession, user_id: UUID, job_id: U
 
     council_run.status = "done"
     council_run.completed_at = datetime.now(timezone.utc)
+    # Ownership check and publication commit MUST be the same transaction
+    # (docs/v3-execution/CONTRACTS.md C2) -- every Recommendation/
+    # PortfolioRecommendation row added above, plus this council_run status
+    # flip, is still uncommitted at this point (this function holds one
+    # long-lived transaction with a single commit at the very end). If this
+    # attempt's worker_token no longer matches (lease expired and another
+    # attempt reclaimed the job), verify_ownership raises before anything
+    # below it commits -- nothing this attempt produced becomes visible.
+    await verify_ownership(db, job_id, worker_token)
     await db.commit()
     return council_run
 
@@ -659,7 +885,47 @@ def _to_fundamental_evidence(snapshot: FundamentalSnapshot | None) -> Fundamenta
         pe=snapshot.pe,
         net_margin=snapshot.net_margin,
         promoter_pledging=snapshot.promoter_pledging,
+        ebitda_margin=snapshot.ebitda_margin,
+        operating_cash_flow=snapshot.operating_cash_flow,
+        free_cash_flow=snapshot.free_cash_flow,
+        pb=snapshot.pb,
+        ev_ebitda=snapshot.ev_ebitda,
+        dividend_yield=snapshot.dividend_yield,
+        institutional_ownership=snapshot.institutional_ownership,
+        insider_holding_pct=snapshot.insider_holding_pct,
     )
+
+
+def _candles_to_return_series(candles: list[Candle]) -> pd.Series:
+    """Daily returns indexed by trading DATE, not row position (docs/V2-
+    RETHINK.md P1). MeanVariancePortfolioModel used to align candidates by
+    truncating every series to the shortest length and zipping positionally
+    -- correct only if every candidate's history has identical missing
+    sessions, which isn't guaranteed (a stale cache gap, a trading halt, a
+    newer listing). Returning a date-indexed Series lets the optimizer do a
+    real date-based inner join instead."""
+    closes = pd.Series(
+        [c.close for c in candles], index=pd.DatetimeIndex([c.timestamp for c in candles]).normalize()
+    )
+    return closes.pct_change().dropna()
+
+
+def _prelim_score(
+    symbol: str,
+    fundamentals_by_symbol: dict[str, FundamentalSnapshot | None],
+    technicals_by_symbol: dict[str, dict],
+) -> float:
+    """Cheap fundamental+technical-only ranking used both to pick which
+    screen-passing symbols get the expensive Kronos/news work (docs/V2-
+    RETHINK.md P1: must rank before truncating, not truncate in arbitrary
+    seed order) and to narrow further to the final council candidates."""
+    parts = []
+    f = calc_fundamental_score(_to_fundamental_evidence(fundamentals_by_symbol[symbol]))
+    t = calc_technical_score(_to_technical_evidence(technicals_by_symbol[symbol]))
+    for v in (f, t):
+        if v is not None:
+            parts.append(v)
+    return sum(parts) / len(parts) if parts else 0.0
 
 
 def _to_technical_evidence(tech: dict) -> TechnicalEvidence | None:
@@ -691,8 +957,13 @@ async def _evaluate_candidate(
     risk_profile_label: str,
     plan: dict,
     market_regime: str | None = None,
-) -> None:
-    last_price = candles[-1].close if candles else 0.0
+) -> str:
+    # yfinance occasionally returns NaN for a bad/halted trading day -- Postgres'
+    # JSON type rejects literal NaN outright (not valid per the JSON spec, unlike
+    # Python's json module which allows it), crashing the INSERT. Walk back to the
+    # last candle with a real close rather than propagating whatever's newest.
+    last_valid_close = next((c.close for c in reversed(candles) if c.close == c.close), None)
+    last_price = last_valid_close if last_valid_close is not None else 0.0
     fundamental_ev = _to_fundamental_evidence(fundamentals)
     technical_ev = _to_technical_evidence(technicals)
     kronos_ev = KronosEvidence(**kronos_data) if kronos_data else None
@@ -710,7 +981,13 @@ async def _evaluate_candidate(
         symbol=symbol,
         exchange="NSE",
         market=MarketEvidence(
-            price=last_price, market_cap=fundamentals.market_cap if fundamentals else None, volume=candles[-1].volume if candles else 0
+            price=last_price,
+            market_cap=(
+                fundamentals.market_cap
+                if fundamentals and fundamentals.market_cap == fundamentals.market_cap
+                else None
+            ),
+            volume=candles[-1].volume if candles else 0,
         ),
         fundamentals=fundamental_ev,
         technical=technical_ev,
@@ -763,7 +1040,27 @@ async def _evaluate_candidate(
             model_agreement=breakdown.model_agreement,
             data_quality=breakdown.data_quality,
             confidence=breakdown.confidence,
+            confidence_band=breakdown.confidence_band,
         )
+    )
+
+    # V3 Phase 02 (docs/v3-execution/phase-02.md): record exactly which data
+    # version fed this instrument's evidence in THIS run, by natural identity
+    # (source/as-of/generated-at), so a later read can bind back to the exact
+    # inputs a published report used instead of always showing "most recent."
+    await record_manifest_entry(
+        db,
+        council_run.id,
+        instrument.id,
+        candle_source=candles[-1].source if candles else None,
+        candle_as_of=max((c.timestamp for c in candles), default=None),
+        fundamentals_source=fundamentals.source if fundamentals else None,
+        fundamentals_as_of_date=fundamentals.as_of_date if fundamentals else None,
+        fundamentals_retrieved_at=fundamentals.retrieved_at if fundamentals else None,
+        technicals_computed_at=technicals.get("computed_at") if technicals else None,
+        kronos_model_version=kronos_data.get("model_version") if kronos_data else None,
+        kronos_forecast_horizon=kronos_data.get("forecast_horizon") if kronos_data else None,
+        kronos_generated_at=kronos_data.get("generated_at") if kronos_data else None,
     )
 
     judge = role_results.get("judge")
@@ -781,6 +1078,7 @@ async def _evaluate_candidate(
     # beta/debt-to-equity) -- distinct from risk_level above, and allowed to
     # stay None when too few signals are available (Section 8: never guess).
     stock_risk_tier = calc_risk_tier(technical_ev, fundamental_ev)
+    stock_risk_tier_score, stock_risk_tier_breakdown = calc_risk_tier_score_with_breakdown(technical_ev, fundamental_ev)
     db.add(
         Recommendation(
             user_id=council_run.user_id,
@@ -788,9 +1086,12 @@ async def _evaluate_candidate(
             instrument_id=instrument.id,
             recommendation=recommendation_label,
             confidence=breakdown.confidence,
+            confidence_band=breakdown.confidence_band,
             score=breakdown.final_score,
             risk_level=stock_risk_level,
             risk_tier=stock_risk_tier,
+            risk_tier_score=stock_risk_tier_score,
+            risk_tier_breakdown=stock_risk_tier_breakdown,
             suggested_horizon=f"{horizon_years}+ years",
             strengths=strengths,
             risks=risks,
@@ -808,3 +1109,4 @@ async def _evaluate_candidate(
         )
     )
     await db.flush()
+    return recommendation_label

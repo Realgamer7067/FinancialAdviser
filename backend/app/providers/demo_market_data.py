@@ -58,6 +58,9 @@ class DemoMarketDataProvider(MarketDataProvider):
                     volume=rng.randint(100_000, 900_000),
                     source="demo_seed",
                     retrieved_at=retrieved_at,
+                    # Synthetic data has no real corporate-actions history to
+                    # be adjusted for -- this flag just satisfies the schema.
+                    adjusted=False,
                 )
             )
         return candles

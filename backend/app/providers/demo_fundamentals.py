@@ -52,6 +52,7 @@ class DemoFundamentalProvider(FundamentalDataProvider):
             pb=rng.uniform(1, 12),
             ev_ebitda=rng.uniform(5, 25),
             dividend_yield=rng.uniform(0.0, 0.03),
+            insider_holding_pct=rng.uniform(0.3, 0.75),
             promoter_holding=rng.uniform(0.3, 0.75),
             promoter_pledging=None,
             institutional_ownership=rng.uniform(0.1, 0.4),

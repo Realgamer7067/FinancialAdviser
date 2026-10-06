@@ -2,12 +2,18 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { motion } from "framer-motion";
 import { api, ApiError } from "@/lib/api";
 import type { RiskProfile } from "@/lib/types";
+import { fadeInUp, staggerChildren } from "@/lib/motion";
 import RiskGauge from "@/components/ui/RiskGauge";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 
-const RADIO_GROUP = "block space-y-1 text-sm";
+const LABEL = "block space-y-1 text-sm text-text-primary";
+const INPUT =
+  "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -53,33 +59,46 @@ export default function OnboardingPage() {
 
   if (result) {
     return (
-      <div className="mx-auto max-w-md space-y-4 rounded border bg-white p-6">
-        <h1 className="text-lg font-semibold">Your investor profile is ready</h1>
-        <RiskGauge value={result.risk_score} label={result.risk_profile} />
-        <p className="text-sm text-slate-600">Horizon: {result.investment_horizon_years} years</p>
-        <Button onClick={() => router.push("/dashboard")} className="w-full">
-          Go to dashboard
-        </Button>
-      </div>
+      <motion.div initial="hidden" animate="visible" variants={fadeInUp} className="mx-auto max-w-md">
+        <Card className="space-y-4">
+          <h1 className="text-lg font-semibold text-text-primary">Earlier research profile saved</h1>
+          <RiskGauge value={result.risk_score} label={result.risk_profile} />
+          <p className="text-sm text-text-muted">Horizon: {result.investment_horizon_years} years</p>
+          <p className="text-sm text-text-muted">Your portfolio reviews use the Financial profile, not this.</p>
+          <Button onClick={() => router.push("/finances")} className="w-full">
+            Open Financial profile
+          </Button>
+          <Link href="/dashboard" className="block text-center text-sm font-medium text-accent hover:text-accent-hover">Go to earlier research dashboard</Link>
+        </Card>
+      </motion.div>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="mx-auto max-w-xl space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold">Tell us about your finances</h1>
-        <p className="text-sm text-slate-500">No jargon, just forms -- this builds your investor profile.</p>
-      </div>
+    <motion.form
+      onSubmit={onSubmit}
+      initial="hidden"
+      animate="visible"
+      variants={staggerChildren}
+      className="mx-auto max-w-xl space-y-8"
+    >
+      <motion.div variants={fadeInUp}>
+        <h1 className="text-xl font-semibold text-text-primary">Earlier investor questionnaire</h1>
+        <p className="text-sm text-text-muted">
+          This configures the earlier stock-candidate research only. It does not set the limits used when your portfolio is
+          reviewed; those come from your <Link href="/finances" className="font-medium text-accent hover:text-accent-hover">Financial profile</Link>.
+        </p>
+      </motion.div>
 
-      <fieldset className="space-y-3 rounded border bg-white p-4">
-        <legend className="px-1 text-sm font-medium">Personal & financial profile</legend>
-        <label className={RADIO_GROUP}>
+      <motion.fieldset variants={fadeInUp} className="space-y-3 rounded-lg border border-border bg-surface p-4 shadow-sm">
+        <legend className="px-1 text-sm font-medium text-text-primary">Personal & financial profile</legend>
+        <label className={LABEL}>
           Age
-          <input name="age" type="number" min={18} max={100} required className="w-full rounded border px-3 py-2" />
+          <input name="age" type="number" min={18} max={100} required className={INPUT} />
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           Employment status
-          <select name="employment_status" required className="w-full rounded border px-3 py-2">
+          <select name="employment_status" required className={INPUT}>
             <option value="salaried">Salaried</option>
             <option value="self_employed">Self-employed</option>
             <option value="business_owner">Business owner</option>
@@ -87,102 +106,102 @@ export default function OnboardingPage() {
             <option value="retired">Retired</option>
           </select>
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           Monthly income range
-          <select name="monthly_income_range" required className="w-full rounded border px-3 py-2">
+          <select name="monthly_income_range" required className={INPUT}>
             <option value="lt_25k">Below ₹25,000</option>
             <option value="25k_50k">₹25,000 - ₹50,000</option>
             <option value="50k_100k">₹50,000 - ₹1,00,000</option>
             <option value="100k_plus">Above ₹1,00,000</option>
           </select>
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           Monthly amount you can invest (₹)
-          <input name="monthly_investable_amount" type="number" min={0} required className="w-full rounded border px-3 py-2" />
+          <input name="monthly_investable_amount" type="number" min={0} required className={INPUT} />
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           Total amount you want to invest now (₹)
-          <input name="total_initial_investment" type="number" min={0} required className="w-full rounded border px-3 py-2" />
+          <input name="total_initial_investment" type="number" min={0} required className={INPUT} />
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           Existing debt (₹, 0 if none)
-          <input name="existing_debt" type="number" min={0} defaultValue={0} className="w-full rounded border px-3 py-2" />
+          <input name="existing_debt" type="number" min={0} defaultValue={0} className={INPUT} />
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           Emergency fund status
-          <select name="emergency_fund_status" required className="w-full rounded border px-3 py-2">
+          <select name="emergency_fund_status" required className={INPUT}>
             <option value="none">No emergency fund yet</option>
             <option value="partial">Have some, not 3-6 months of expenses</option>
             <option value="full">3-6+ months of expenses saved</option>
           </select>
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           Dependents
-          <input name="dependents" type="number" min={0} defaultValue={0} className="w-full rounded border px-3 py-2" />
+          <input name="dependents" type="number" min={0} defaultValue={0} className={INPUT} />
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           Investment objective
-          <select name="investment_objective" required className="w-full rounded border px-3 py-2">
+          <select name="investment_objective" required className={INPUT}>
             <option value="wealth_building">Long-term wealth building</option>
             <option value="retirement">Retirement</option>
             <option value="short_term_goal">A specific short-term goal</option>
             <option value="income">Regular income</option>
           </select>
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           Investment horizon (years)
-          <input name="investment_horizon_years" type="number" min={1} max={40} required className="w-full rounded border px-3 py-2" />
+          <input name="investment_horizon_years" type="number" min={1} max={40} required className={INPUT} />
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           Liquidity requirement
-          <select name="liquidity_requirement" required className="w-full rounded border px-3 py-2">
-            <option value="low">Low -- I won't need this money soon</option>
-            <option value="medium">Medium -- might need some within a couple of years</option>
-            <option value="high">High -- may need to withdraw soon</option>
+          <select name="liquidity_requirement" required className={INPUT}>
+            <option value="low">Low — I won&apos;t need this money soon</option>
+            <option value="medium">Medium — might need some within a couple of years</option>
+            <option value="high">High — may need to withdraw soon</option>
           </select>
         </label>
-        <label className={RADIO_GROUP}>
+        <label className={LABEL}>
           How often will you invest?
-          <select name="investment_frequency" required className="w-full rounded border px-3 py-2">
+          <select name="investment_frequency" required className={INPUT}>
             <option value="monthly">Monthly (SIP-style)</option>
             <option value="lump_sum">One-time lump sum</option>
             <option value="irregular">Irregular</option>
           </select>
         </label>
-      </fieldset>
+      </motion.fieldset>
 
-      <fieldset className="space-y-4 rounded border bg-white p-4">
-        <legend className="px-1 text-sm font-medium">Risk profile</legend>
+      <motion.fieldset variants={fadeInUp} className="space-y-4 rounded-lg border border-border bg-surface p-4 shadow-sm">
+        <legend className="px-1 text-sm font-medium text-text-primary">Risk profile</legend>
 
         <div>
-          <p className="mb-1 text-sm font-medium">What would you do if your portfolio fell 20%?</p>
+          <p className="mb-1 text-sm font-medium text-text-primary">What would you do if your portfolio fell 20%?</p>
           {[
             ["sell_all", "Sell everything"],
             ["sell_some", "Sell some"],
             ["hold", "Hold"],
             ["buy_more", "Buy more"],
           ].map(([value, label]) => (
-            <label key={value} className="flex items-center gap-2 text-sm">
-              <input type="radio" name="portfolio_drop_20pct_reaction" value={value} required /> {label}
+            <label key={value} className="flex items-center gap-2 text-sm text-text-muted">
+              <input type="radio" name="portfolio_drop_20pct_reaction" value={value} required className="accent-accent" /> {label}
             </label>
           ))}
         </div>
 
         <div>
-          <p className="mb-1 text-sm font-medium">What matters most to you?</p>
+          <p className="mb-1 text-sm font-medium text-text-primary">What matters most to you?</p>
           {[
             ["capital_preservation", "Capital preservation"],
             ["balanced_growth", "Balanced growth"],
             ["maximum_growth", "Maximum long-term growth"],
           ].map(([value, label]) => (
-            <label key={value} className="flex items-center gap-2 text-sm">
-              <input type="radio" name="priority" value={value} required /> {label}
+            <label key={value} className="flex items-center gap-2 text-sm text-text-muted">
+              <input type="radio" name="priority" value={value} required className="accent-accent" /> {label}
             </label>
           ))}
         </div>
 
         <div>
-          <p className="mb-1 text-sm font-medium">How much temporary loss are you comfortable with?</p>
+          <p className="mb-1 text-sm font-medium text-text-primary">How much temporary loss are you comfortable with?</p>
           {[
             ["0_10", "0-10%"],
             ["10_20", "10-20%"],
@@ -190,17 +209,23 @@ export default function OnboardingPage() {
             ["30_50", "30-50%"],
             ["50_plus", "50%+"],
           ].map(([value, label]) => (
-            <label key={value} className="flex items-center gap-2 text-sm">
-              <input type="radio" name="loss_tolerance" value={value} required /> {label}
+            <label key={value} className="flex items-center gap-2 text-sm text-text-muted">
+              <input type="radio" name="loss_tolerance" value={value} required className="accent-accent" /> {label}
             </label>
           ))}
         </div>
-      </fieldset>
+      </motion.fieldset>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <Button disabled={loading} className="w-full">
-        {loading ? "Computing your risk profile..." : "Submit"}
-      </Button>
-    </form>
+      {error && (
+        <motion.p variants={fadeInUp} className="text-sm text-negative">
+          {error}
+        </motion.p>
+      )}
+      <motion.div variants={fadeInUp}>
+        <Button disabled={loading} loading={loading} className="w-full">
+          {loading ? "Computing your risk profile..." : "Submit"}
+        </Button>
+      </motion.div>
+    </motion.form>
   );
 }

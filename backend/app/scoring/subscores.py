@@ -76,6 +76,12 @@ def technical_score(ev: TechnicalEvidence | None) -> float | None:
 def kronos_score(ev: KronosEvidence | None) -> float | None:
     if ev is None:
         return None
+    if ev.confidence is None:
+        # No calibration table yet for this (model_version, horizon,
+        # direction_agreement bucket) -- uncalibrated, not a real signal.
+        # Excluded from the weighted average like any other missing evidence
+        # (Section 8: never guess).
+        return None
     confidence = max(0.0, min(ev.confidence, 1.0))
     if confidence < _KRONOS_MIN_CONFIDENCE:
         # Too uncertain to treat as a real signal -- excluded from the weighted
@@ -83,7 +89,12 @@ def kronos_score(ev: KronosEvidence | None) -> float | None:
         # Without this, a near-zero-confidence forecast still contributed
         # exactly 50 (neutral midpoint), silently padding model_agreement.
         return None
-    direction_multiplier = {"bullish": 1, "neutral": 0, "bearish": -1}.get(ev.direction, 0)
+    if ev.direction == "neutral":
+        # A neutral call is "no directional evidence," not "evidence of no
+        # movement" -- treat it the same as missing, don't pad model_agreement
+        # with a fake-neutral 50.
+        return None
+    direction_multiplier = {"bullish": 1, "bearish": -1}.get(ev.direction, 0)
     swing_magnitude = min(abs(ev.predicted_return) * 100 * 4, 40)  # cap a +/-10% forecast at +/-40 pts
     return _clip(50 + swing_magnitude * direction_multiplier * confidence)
 
@@ -130,16 +141,10 @@ def _bucket(value: float, bands: list[list[float]]) -> float:
     return bands[-1][1]
 
 
-def risk_tier_score(
-    technical_ev: TechnicalEvidence | None, fundamental_ev: FundamentalEvidence | None
-) -> float | None:
-    """Composite 0-100 "riskiness" of the stock itself (higher = riskier),
-    from whichever of volatility/drawdown/beta/debt-to-equity are present --
-    distinct from risk_fit_score, which is about the USER's fit, not the
-    stock's own objective risk level."""
-    cfg = scoring_config()["risk_tier"]
+def _risk_tier_parts(
+    technical_ev: TechnicalEvidence | None, fundamental_ev: FundamentalEvidence | None, cfg: dict
+) -> dict[str, float]:
     parts: dict[str, float] = {}
-
     if technical_ev is not None:
         if technical_ev.volatility_30d is not None:
             parts["volatility_30d"] = _bucket(technical_ev.volatility_30d, cfg["volatility_bands"])
@@ -149,6 +154,18 @@ def risk_tier_score(
             parts["beta"] = _bucket(technical_ev.beta, cfg["beta_bands"])
     if fundamental_ev is not None and fundamental_ev.debt_to_equity is not None:
         parts["debt_to_equity"] = _bucket(fundamental_ev.debt_to_equity, cfg["debt_to_equity_bands"])
+    return parts
+
+
+def risk_tier_score(
+    technical_ev: TechnicalEvidence | None, fundamental_ev: FundamentalEvidence | None
+) -> float | None:
+    """Composite 0-100 "riskiness" of the stock itself (higher = riskier),
+    from whichever of volatility/drawdown/beta/debt-to-equity are present --
+    distinct from risk_fit_score, which is about the USER's fit, not the
+    stock's own objective risk level."""
+    cfg = scoring_config()["risk_tier"]
+    parts = _risk_tier_parts(technical_ev, fundamental_ev, cfg)
 
     if len(parts) < cfg["min_inputs"]:
         return None
@@ -157,6 +174,24 @@ def risk_tier_score(
     weight_sum = sum(weights[k] for k in parts)
     raw = sum(parts[k] * weights[k] for k in parts) / weight_sum
     return _clip(raw)
+
+
+def risk_tier_score_with_breakdown(
+    technical_ev: TechnicalEvidence | None, fundamental_ev: FundamentalEvidence | None
+) -> tuple[float, dict[str, float]] | tuple[None, None]:
+    """Same composite as risk_tier_score, but also returns the per-signal
+    bucket scores that fed it (Phase 0B: these were computed then discarded --
+    the frontend risk-tier gauge needs the breakdown, not just the composite)."""
+    cfg = scoring_config()["risk_tier"]
+    parts = _risk_tier_parts(technical_ev, fundamental_ev, cfg)
+
+    if len(parts) < cfg["min_inputs"]:
+        return None, None
+
+    weights = cfg["weights"]
+    weight_sum = sum(weights[k] for k in parts)
+    raw = sum(parts[k] * weights[k] for k in parts) / weight_sum
+    return _clip(raw), parts
 
 
 def risk_tier(

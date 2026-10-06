@@ -6,6 +6,14 @@ backend/.venv/
 backend/vendor/
 /vendor/
 data/cache/
+# The rule above only matches <repo-root>/data/cache/ -- a pattern with a
+# slash in the middle (not just leading/trailing) is anchored to the
+# .gitignore's own location in git's matching rules, not recursive. The V3
+# backend has its own runtime cache root at backend/data/ (see CONFIG_DIR/
+# DATA_DIR in app/core/config.py) that root-level rule never reached --
+# found during a pre-commit audit (2026-09-17): backend/data/cache/
+# (HuggingFace model cache) was untracked but NOT actually ignored.
+backend/data/cache/
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*
@@ -26,3 +34,15 @@ frontend/out/
 data/truedata_raw/
 *truedata*.csv
 *truedata*.json
+
+# Postgres dumps/restores: real data (incl. TrueData-sourced candle rows),
+# role passwords in pg_dumpall output -- local-only, never committed, never
+# COPYed into a Dockerfile (see scripts/restore_postgres_backup.sh, which
+# bind-mounts instead). Keep any dump file in backups/ or repo root.
+*.sql
+backups/
+
+# Claude Code local session state -- machine-specific tool permissions and
+# resume-checkpoint metadata, not project config. Never committed.
+.claude/settings.local.json
+.claude/RESUME.md

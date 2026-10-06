@@ -9,11 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.single_user import SINGLE_USER_ID
 from app.models.analysis import FinbertAnalysis, KronosPrediction, TechnicalFeatures
+from app.models.council import CouncilOutput
 from app.models.fundamentals import FundamentalMetrics
 from app.models.market import Instrument, MarketCandle
 from app.models.news import NewsAnalysis, NewsItem
 from app.models.recommendation import Recommendation
-from app.schemas.recommendation import RecommendationCard
+from app.providers.mode import expected_candle_source, expected_fundamentals_source
+from app.schemas.recommendation import CouncilRoleOutput, RecommendationCard
+from app.services.manifest import get_manifest_entry, is_legacy
 from app.schemas.stock import (
     FundamentalsOut,
     KronosOut,
@@ -35,41 +38,103 @@ async def get_stock_detail(symbol: str, db: AsyncSession = Depends(get_db)):
     if instrument is None:
         raise HTTPException(status_code=404, detail="Unknown symbol")
 
+    # docs/v3-execution/CONTRACTS.md C3: an API read-path selecting "most
+    # recent row" must filter by the current DEMO_MODE's source, same as the
+    # pipeline's own ingestion-side cache reads -- otherwise a demo<->live
+    # toggle can serve the wrong mode's candle/fundamentals here even though
+    # ingestion itself is correctly isolated.
     latest_candle = (
         await db.execute(
             select(MarketCandle)
-            .where(MarketCandle.instrument_id == instrument.id)
+            .where(
+                MarketCandle.instrument_id == instrument.id,
+                MarketCandle.source == expected_candle_source(),
+                MarketCandle.superseded_at.is_(None),
+            )
             .order_by(MarketCandle.timestamp.desc())
             .limit(1)
         )
     ).scalar_one_or_none()
 
+    # V3 Phase 02 (docs/v3-execution/phase-02.md): a report's evidence
+    # (fundamentals/technicals/kronos) must bind to the EXACT data the
+    # recommendation was actually built from, not "most recent as of read
+    # time" -- otherwise the page can silently mix a stale council verdict
+    # with newer numbers it never saw. Resolve the recommendation and its
+    # manifest entry FIRST so evidence reads can pin to it when available.
+    # Price stays independently "live" on purpose -- current market price is
+    # supposed to be fresh, unlike the scored evidence inputs.
+    recommendation = (
+        await db.execute(
+            select(Recommendation)
+            .where(Recommendation.instrument_id == instrument.id, Recommendation.user_id == SINGLE_USER_ID)
+            .order_by(Recommendation.generated_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    manifest_entry = (
+        await get_manifest_entry(db, recommendation.council_run_id, instrument.id) if recommendation else None
+    )
+    evidence_is_legacy = recommendation is not None and is_legacy(manifest_entry)
+
+    fundamentals_query = select(FundamentalMetrics).where(FundamentalMetrics.instrument_id == instrument.id)
+    if manifest_entry and manifest_entry.fundamentals_retrieved_at is not None:
+        fundamentals_query = fundamentals_query.where(
+            FundamentalMetrics.source == manifest_entry.fundamentals_source,
+            FundamentalMetrics.retrieved_at == manifest_entry.fundamentals_retrieved_at,
+        )
+    else:
+        fundamentals_query = fundamentals_query.where(FundamentalMetrics.source == expected_fundamentals_source())
     fundamentals = (
-        await db.execute(
-            select(FundamentalMetrics)
-            .where(FundamentalMetrics.instrument_id == instrument.id)
-            .order_by(FundamentalMetrics.retrieved_at.desc())
-            .limit(1)
-        )
+        await db.execute(fundamentals_query.order_by(FundamentalMetrics.retrieved_at.desc()).limit(1))
     ).scalar_one_or_none()
 
+    technicals_query = select(TechnicalFeatures).where(TechnicalFeatures.instrument_id == instrument.id)
+    if manifest_entry and manifest_entry.technicals_computed_at is not None:
+        technicals_query = technicals_query.where(TechnicalFeatures.computed_at == manifest_entry.technicals_computed_at)
     technicals = (
-        await db.execute(
-            select(TechnicalFeatures)
-            .where(TechnicalFeatures.instrument_id == instrument.id)
-            .order_by(TechnicalFeatures.computed_at.desc())
-            .limit(1)
-        )
+        await db.execute(technicals_query.order_by(TechnicalFeatures.computed_at.desc()).limit(1))
     ).scalar_one_or_none()
 
-    kronos = (
-        await db.execute(
-            select(KronosPrediction)
-            .where(KronosPrediction.instrument_id == instrument.id)
-            .order_by(KronosPrediction.generated_at.desc())
-            .limit(1)
+    kronos_query = select(KronosPrediction).where(
+        KronosPrediction.instrument_id == instrument.id, KronosPrediction.forecast_horizon == "30d"
+    )
+    if manifest_entry and manifest_entry.kronos_generated_at is not None:
+        kronos_query = kronos_query.where(
+            KronosPrediction.model_version == manifest_entry.kronos_model_version,
+            KronosPrediction.generated_at == manifest_entry.kronos_generated_at,
         )
+    kronos = (
+        await db.execute(kronos_query.order_by(KronosPrediction.generated_at.desc()).limit(1))
     ).scalar_one_or_none()
+
+    # Up to 3 rows, one per horizon -- separate queries rather than a window
+    # function since this table is tiny per instrument (Phase 0B #4).
+    kronos_horizons = []
+    for horizon in ("7d", "30d", "90d"):
+        row = (
+            await db.execute(
+                select(KronosPrediction)
+                .where(KronosPrediction.instrument_id == instrument.id, KronosPrediction.forecast_horizon == horizon)
+                .order_by(KronosPrediction.generated_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if row is not None:
+            kronos_horizons.append(
+                KronosOut(
+                    forecast_horizon=row.forecast_horizon,
+                    direction=row.direction,
+                    predicted_return=row.predicted_return,
+                    predicted_return_p10=row.predicted_return_p10,
+                    predicted_return_p90=row.predicted_return_p90,
+                    direction_agreement=row.direction_agreement,
+                    sample_count=row.sample_count,
+                    confidence=row.confidence,
+                    generated_at=row.generated_at,
+                )
+            )
 
     news = (
         await db.execute(
@@ -80,20 +145,35 @@ async def get_stock_detail(symbol: str, db: AsyncSession = Depends(get_db)):
         )
     ).scalar_one_or_none()
 
-    recommendation = (
-        await db.execute(
-            select(Recommendation)
-            .where(Recommendation.instrument_id == instrument.id, Recommendation.user_id == SINGLE_USER_ID)
-            .order_by(Recommendation.generated_at.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+    council_outputs = []
+    if recommendation is not None:
+        output_rows = (
+            await db.execute(
+                select(CouncilOutput).where(
+                    CouncilOutput.council_run_id == recommendation.council_run_id,
+                    CouncilOutput.instrument_id == instrument.id,
+                )
+            )
+        ).scalars().all()
+        council_outputs = [
+            CouncilRoleOutput(
+                role=out.role,
+                content=out.content,
+                model_name=out.model_name,
+                model_version=out.model_version,
+                prompt_version=out.prompt_version,
+                created_at=out.created_at,
+            )
+            for out in output_rows
+        ]
 
     return StockDetail(
         symbol=instrument.symbol,
         name=instrument.name,
         sector=instrument.sector,
         latest_price=latest_candle.close if latest_candle else None,
+        price_as_of=latest_candle.timestamp if latest_candle else None,
+        evidence_is_legacy=evidence_is_legacy,
         fundamentals=(
             FundamentalsOut(
                 as_of_date=str(fundamentals.as_of_date),
@@ -116,6 +196,13 @@ async def get_stock_detail(symbol: str, db: AsyncSession = Depends(get_db)):
                 drawdown_1y=technicals.drawdown_1y,
                 macd_hist=technicals.macd_hist,
                 beta=technicals.beta,
+                sma_20=technicals.sma_20,
+                sma_50=technicals.sma_50,
+                sma_200=technicals.sma_200,
+                ema_12=technicals.ema_12,
+                ema_26=technicals.ema_26,
+                bb_upper=technicals.bb_upper,
+                bb_lower=technicals.bb_lower,
                 computed_at=technicals.computed_at,
             )
             if technicals
@@ -126,12 +213,17 @@ async def get_stock_detail(symbol: str, db: AsyncSession = Depends(get_db)):
                 forecast_horizon=kronos.forecast_horizon,
                 direction=kronos.direction,
                 predicted_return=kronos.predicted_return,
+                predicted_return_p10=kronos.predicted_return_p10,
+                predicted_return_p90=kronos.predicted_return_p90,
+                direction_agreement=kronos.direction_agreement,
+                sample_count=kronos.sample_count,
                 confidence=kronos.confidence,
                 generated_at=kronos.generated_at,
             )
             if kronos
             else None
         ),
+        kronos_horizons=kronos_horizons,
         news=(
             NewsOut(
                 sentiment_score=news.sentiment_score,
@@ -150,9 +242,12 @@ async def get_stock_detail(symbol: str, db: AsyncSession = Depends(get_db)):
                 name=instrument.name,
                 recommendation=recommendation.recommendation,
                 confidence=recommendation.confidence,
+                confidence_band=recommendation.confidence_band,
                 score=recommendation.score,
                 risk_level=recommendation.risk_level,
                 risk_tier=recommendation.risk_tier,
+                risk_tier_score=recommendation.risk_tier_score,
+                risk_tier_breakdown=recommendation.risk_tier_breakdown,
                 suggested_horizon=recommendation.suggested_horizon,
                 strengths=recommendation.strengths,
                 risks=recommendation.risks,
@@ -167,6 +262,7 @@ async def get_stock_detail(symbol: str, db: AsyncSession = Depends(get_db)):
                 model_agreement=recommendation.model_agreement,
                 data_quality=recommendation.data_quality,
                 generated_at=recommendation.generated_at,
+                council_outputs=council_outputs,
             )
             if recommendation
             else None
@@ -189,6 +285,8 @@ async def get_stock_history(symbol: str, days: int = 180, db: AsyncSession = Dep
                 MarketCandle.instrument_id == instrument.id,
                 MarketCandle.interval == "1d",
                 MarketCandle.timestamp >= cutoff,
+                MarketCandle.source == expected_candle_source(),
+                MarketCandle.superseded_at.is_(None),
             )
             .order_by(MarketCandle.timestamp.asc())
         )
@@ -197,7 +295,10 @@ async def get_stock_history(symbol: str, days: int = 180, db: AsyncSession = Dep
     return PriceHistoryOut(
         symbol=symbol,
         interval="1d",
-        points=[PriceHistoryPoint(timestamp=r.timestamp, close=r.close) for r in rows],
+        points=[
+            PriceHistoryPoint(timestamp=r.timestamp, open=r.open, high=r.high, low=r.low, close=r.close, volume=r.volume)
+            for r in rows
+        ],
     )
 
 

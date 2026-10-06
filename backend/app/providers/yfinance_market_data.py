@@ -95,6 +95,11 @@ class YFinanceMarketDataProvider(MarketDataProvider):
                 volume=int(row["Volume"]),
                 source=_SOURCE,
                 retrieved_at=retrieved_at,
+                # `_history_raw` calls yf.Ticker(...).history(...) without
+                # passing `auto_adjust` -- yfinance's Ticker.history() default
+                # is auto_adjust=True, so the returned Close is already
+                # split/dividend-adjusted, not a raw traded price.
+                adjusted=True,
             )
             for ts, row in hist.iterrows()
         ]

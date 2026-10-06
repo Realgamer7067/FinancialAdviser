@@ -1,0 +1,231 @@
+<title>Portfolio Intelligence Under the Hood</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: a sticky chapter bar, then one chapter per question (stack, models, data hygiene, signals, plan maths, evidence, engineering).
+   Every item answers the same three questions so the page can be scanned: What it is, Why it is here, What you get.
+   Colour: ink on cool paper with a teal accent; amber marks things that are unproven or limited. */
+:root {
+  --paper: #f3f5f6; --card: #ffffff; --ink: #14212b; --muted: #55656f; --line: #cfd8dd; --teal: #0b6e6e; --teal-soft: #dcefee; --amber: #8a5300; --amber-soft: #fbefd5;
+  --serif: "Fraunces", Georgia, serif; --sans: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #0f1a21; --card: #17252e; --ink: #e6eef2; --muted: #9fb0b9; --line: #2b3d48; --teal: #5ec9c0; --teal-soft: #14363a; --amber: #f0b45a; --amber-soft: #3a2c12; color-scheme: dark; } }
+:root[data-theme="dark"] { --paper: #0f1a21; --card: #17252e; --ink: #e6eef2; --muted: #9fb0b9; --line: #2b3d48; --teal: #5ec9c0; --teal-soft: #14363a; --amber: #f0b45a; --amber-soft: #3a2c12; color-scheme: dark; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.55; padding-inline: 18px; }
+.wrap { max-width: 1040px; margin-inline: auto; padding-block: 24px 64px; display: flex; flex-direction: column; gap: 26px; }
+h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(27px, 5vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--serif); font-weight: 600; font-size: 24px; margin: 0; text-wrap: balance; }
+h3 { font-size: 16px; margin: 0; font-weight: 600; }
+p { margin: 0; } .lede { color: var(--muted); max-width: 72ch; margin-top: 8px; }
+nav { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-block: 1px solid var(--line); padding-block: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+nav a { color: var(--ink); text-decoration: none; font-size: 13px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; background: var(--card); }
+nav a:hover, nav a:focus-visible { border-color: var(--teal); color: var(--teal); outline: none; }
+.facts { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.fact { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; } .fact b { display: block; font-family: var(--mono); font-weight: 500; font-size: 20px; } .fact span { color: var(--muted); font-size: 12.5px; }
+section { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 64px; }
+section > header p { color: var(--muted); max-width: 74ch; margin-top: 4px; }
+.item { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.item header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.item header small { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+dl { margin: 0; display: grid; grid-template-columns: 92px 1fr; gap: 6px 14px; } dt { color: var(--teal); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; padding-top: 2px; } dd { margin: 0; min-width: 0; }
+dd.limit { background: var(--amber-soft); border-radius: 6px; padding: 5px 9px; color: var(--ink); } dt.limit { color: var(--amber); }
+code { font-family: var(--mono); font-size: 12.5px; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.pill { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; color: var(--muted); white-space: nowrap; }
+.pill.warn { color: var(--amber); border-color: var(--amber); } .pill.ok { color: var(--teal); border-color: var(--teal); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; } th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; } th { background: var(--paper); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); } tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+.formula { font-family: var(--mono); font-size: 12.5px; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; overflow-x: auto; white-space: pre; }
+.two { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.rule { border-left: 3px solid var(--teal); padding: 4px 12px; background: var(--teal-soft); border-radius: 0 8px 8px 0; }
+@media (max-width: 560px) { dl { grid-template-columns: 1fr; gap: 0 0; } dt { padding-top: 8px; } }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Portfolio Intelligence Under the Hood</h1>
+  <p class="lede">Every library, model and algorithm in the app: what it is, why it is used, and what it gives you. Facts are taken from the code and from measurements made on your own data. Amber boxes mark what is unproven or limited.</p>
+</header>
+
+<div class="facts" aria-label="Size of the project">
+  <div class="fact"><b>27.9 k</b><span>lines of Python (backend)</span></div><div class="fact"><b>10.7 k</b><span>lines of TypeScript (frontend)</span></div>
+  <div class="fact"><b>906</b><span>automated tests, 97 files</span></div><div class="fact"><b>33</b><span>database migrations</span></div>
+  <div class="fact"><b>29</b><span>pages</span></div><div class="fact"><b>0</b><span>order calls: read-only</span></div>
+</div>
+
+<nav aria-label="Chapters"><a href="#rule">The rule</a><a href="#stack">Libraries</a><a href="#models">Models</a><a href="#hygiene">Data hygiene</a><a href="#signals">Signals</a><a href="#plan">Plan maths</a><a href="#personal">Your finances</a><a href="#outside">Outside research</a><a href="#evidence">Evidence</a><a href="#engineering">Engineering</a><a href="#research">Research</a></nav>
+
+<section id="rule"><header><h2>The one rule behind every choice</h2></header>
+  <div class="rule"><b>Deterministic code beats a specialist model, and a specialist model beats a language model.</b> Screening, scoring, allocation and the safety gates are plain Python you can read and test. Models only produce evidence that the code then checks. A language model only writes up evidence it was handed and never supplies a number. And nothing earns influence until it has been tested against what prices actually did next.</div>
+</section>
+
+<section id="stack"><header><h2>Libraries and why each one is here</h2><p>Chosen for being boring and well tested. Money maths is hand-written in Decimal so no float rounding reaches your rupees.</p></header>
+<div class="tablewrap"><table>
+<thead><tr><th>Library</th><th>Used for</th><th>Why it, and what you get</th></tr></thead><tbody>
+<tr><td>FastAPI 0.115</td><td>The API (139 routes)</td><td>Async, so slow broker and web calls never block the page; request and response checking comes from the type definitions, so malformed input is rejected before it reaches any logic.</td></tr>
+<tr><td>Pydantic 2</td><td>Schemas, settings, validating language-model output</td><td>Every model reply must parse into a schema or it is treated as missing, never trusted. Money fields reject NaN, negative and non-finite values.</td></tr>
+<tr><td>SQLAlchemy 2 (async) + asyncpg</td><td>Database access</td><td>One async path to Postgres 16. Postgres matters for the job queue (row locks) and for exact numeric types.</td></tr>
+<tr><td>Alembic</td><td>Schema changes</td><td>33 migrations, additive only. A startup barrier refuses to run if the database and code disagree, so a half-migrated state cannot silently corrupt data.</td></tr>
+<tr><td>httpx</td><td>Every outbound call</td><td>One client for Angel, NSE, AMFI, mfapi and web fetches, with timeouts and an allow-list; the document fetcher pins resolved IPs to defeat DNS tricks.</td></tr>
+<tr><td>pandas + numpy</td><td>Time-series maths, the backtest</td><td>Vectorised rolling means, ranks and shifts over 1.05 million daily prices. Each formula has a single definition so two pages cannot disagree.</td></tr>
+<tr><td>pandas-ta-classic</td><td>RSI, MACD and similar indicators</td><td>Only the earlier stock-candidate pipeline uses it. The current signals are hand-written so every threshold is visible.</td></tr>
+<tr><td>PyTorch + transformers</td><td>Runs Kronos and FinBERT on CPU</td><td>No GPU needed. Weights are downloaded once and run locally, so your data never leaves your machine for the models.</td></tr>
+<tr><td>PyPortfolioOpt</td><td>Mean-variance portfolio sizing</td><td>The earlier candidate-portfolio page. A standard, inspectable optimiser, with fallbacks tested for when the solver fails.</td></tr>
+<tr><td>stable-baselines3 + gymnasium</td><td>An experimental reinforcement-learning allocator</td><td>Trained once (about 30,000 steps). Shipped but not used for any live suggestion, and labelled lightly trained everywhere it appears.</td></tr>
+<tr><td>openai SDK</td><td>Talks to Qwen or Gemini</td><td>Both expose an OpenAI-compatible endpoint, so the provider is a config change. Includes a key pool and one repair retry for malformed JSON.</td></tr>
+<tr><td>tenacity</td><td>Retries with back-off</td><td>Rate-limited broker and API calls retry politely instead of hammering.</td></tr>
+<tr><td>feedparser, yfinance</td><td>News RSS, Nifty 50 fundamentals</td><td>Free, keyless data. Yahoo now blocks this connection, which is why fundamentals are dated 23 August.</td></tr>
+<tr><td>Next.js 16, React 19, TypeScript</td><td>The interface</td><td>Server-side proxy to the API, strict types shared by every page, one h1 per page and keyboard-reachable tables.</td></tr>
+<tr><td>Tailwind 3.4, Recharts, Framer Motion, Lucide</td><td>Styling, charts, motion, icons</td><td>Design tokens in one place; charts get a text alternative; motion respects reduced-motion settings.</td></tr>
+<tr><td>Docker Compose</td><td>Runs backend, worker, frontend, Postgres</td><td>Everything on 127.0.0.1 only. The network MTU is set to 1280 because your VPN needs it.</td></tr>
+<tr><td>pytest, respx, aiosqlite</td><td>Tests</td><td>906 tests run in about a minute on an in-memory database, plus a Postgres suite for locking and migrations.</td></tr>
+</tbody></table></div>
+<div class="item"><header><h3>Written by hand on purpose</h3></header><dl>
+<dt>What</dt><dd>The Student t distribution (through the regularised incomplete beta function, Lentz continued fraction), block bootstrap, rank correlation, the money cash-flow ledger, the SSRF-safe fetcher, the hysteresis state machines.</dd>
+<dt>Why</dt><dd>Each is small, central and must be exactly right. A library would add weight without adding trust, and hand-written versions are tested against known values.</dd>
+<dt>You get</dt><dd>No scipy dependency, and statistics whose every step can be read.</dd></dl></div>
+</section>
+
+<section id="models"><header><h2>Models, and how much each one is trusted</h2><p>Three kinds of model are present. None of them can change a rupee amount on its own.</p></header>
+<article class="item"><header><h3>Kronos-small</h3><small>NeoQuasar/Kronos-small, 24.7 M parameters</small><span class="pill warn">weight 0</span></header><dl>
+<dt>What</dt><dd>A foundation model trained on candlestick data. Given up to 400 daily bars it samples future price paths (8 draws, temperature 1.0, top-p 0.9) and the app derives a direction and a 30-day move from them.</dd>
+<dt>Why</dt><dd>A cheap second opinion that costs 30 seconds of CPU per stock, so it runs nightly on a shortlist of about 90 names (watchlist, Nifty 50, one ETF per index), not on all 2,600.</dd>
+<dt>You get</dt><dd>A forecast stored with its inputs every trading night, shown only as a rank against other forecasts made the same day (for example "more upbeat than 94% of 89").</dd>
+<dt class="limit">Limit</dt><dd class="limit">Tested on random data with zero drift it still returned +4% to +29%, so its absolute number is meaningless and is not displayed. It counts for nothing in any plan until the scoring ledger shows skill. First live results arrive around 18 November.</dd></dl></article>
+<article class="item"><header><h3>FinBERT</h3><small>ProsusAI/finbert, CPU</small><span class="pill">earlier pipeline</span></header><dl>
+<dt>What</dt><dd>A language model fine-tuned on financial text that labels a headline positive, neutral or negative.</dd>
+<dt>Why</dt><dd>It is small and runs offline, and a classifier is easier to audit than a chat model.</dd>
+<dt>You get</dt><dd>A news-sentiment evidence input for the earlier stock-candidate pipeline. It does not feed the current review or plan.</dd></dl></article>
+<article class="item"><header><h3>Qwen and Gemini (language models)</h3><small>OpenAI-compatible endpoints</small><span class="pill ok">writes, never scores</span></header><dl>
+<dt>What</dt><dd>Used in two places: the research page (extract claims from fetched text, then write a short report) and the earlier analyst "council" (planner, bull, bear, fundamental, quant, risk, judge).</dd>
+<dt>Why</dt><dd>Reading prose is the one job a language model does better than code. Everything is structured JSON, schema-checked, versioned, and a missing role degrades confidence instead of crashing.</dd>
+<dt>You get</dt><dd>Readable research reports whose claims are verified against the text that was actually read (6 of 6 verified on both test runs).</dd>
+<dt class="limit">Limit</dt><dd class="limit">The Gemini search tool is out of quota on your key, so source discovery uses Google News RSS and Wikipedia instead. Output is only as good as the headlines it reads.</dd></dl></article>
+<article class="item"><header><h3>PyPortfolioOpt mean-variance and the FinRL PPO agent</h3><span class="pill warn">not driving the plan</span></header><dl>
+<dt>What</dt><dd>Mean-variance picks weights from past returns and risk. The PPO agent was trained once on the Nifty 50.</dd>
+<dt>Why</dt><dd>Kept so the earlier candidate-portfolio page works and so the project can say honestly what it tried.</dd>
+<dt class="limit">Limit</dt><dd class="limit">Plan new investment does not use either for amounts. It does use PyPortfolioOpt's Ledoit-Wolf shrunk covariance, as a description only: volatility and correlations of the proposed stocks versus holdings, with a warning above 0.7. No expected returns, no optimiser. Its allocator is the rule-based one in the Plan maths chapter.</dd></dl></article>
+</section>
+
+<section id="hygiene"><header><h2>Making the data trustworthy first</h2><p>A signal built on a wrong price is worse than no signal, so the data is audited before any number is computed.</p></header>
+<article class="item"><header><h3>Split and bonus audit</h3><small>market/adjust.py</small></header><dl>
+<dt>What</dt><dd>For every split or bonus on record, compare the overnight move across the ex-date with the event's factor. Near the factor: the series is still raw, so adjust it. Near 1: Angel already adjusted it, leave it. Small factors (within 15% of 1) cannot be told from a normal move and are reported, never applied. Rights issues and demergers are never adjusted; they mark nearby dates unreliable.</dd>
+<dt>Why</dt><dd>Checked live: Angel's candles were already adjusted (RELIANCE bonus, KOTAKBANK split). Assuming they were raw would have halved prices a second time.</dd>
+<dt>You get</dt><dd>Charts and returns without fake 50% crashes, and a visible list of dates to treat with care.</dd></dl></article>
+<article class="item"><header><h3>Total return with dividends</h3><small>market/total_return.py</small></header><dl>
+<dt>What</dt><dd>Adds cash dividends back, reinvested at the ex-date close. Each dividend is multiplied by the product of every later split or bonus factor, because NSE quotes it in the share terms of that day.</dd>
+<dt>Why</dt><dd>Angel's candles are not dividend-adjusted. Measured on 3,669 real dividend events: the ex-day price drop is 0.6 to 1.0 of the dividend, so ignoring dividends would understate returns. Without the scaling step 533 events were overstated about twofold.</dd>
+<dt>You get</dt><dd>Honest return figures: 3,755 dividends applied, and any dividend it cannot scale with certainty is skipped and counted, never guessed.</dd></dl></article>
+<article class="item"><header><h3>Identity: ISIN is the spine</h3></header><dl>
+<dt>What</dt><dd>Every holding is matched by ISIN, checked with the ISO 6166 Luhn check digit. A symbol alone never proves identity. An ETF has two catalogue rows (NSE listing and AMFI's fund row); the traded listing wins, and only a real tie is called ambiguous.</dd>
+<dt>Why</dt><dd>Symbols are reused and renamed; an ISIN is stable. Guessing would silently attach the wrong price to your money.</dd>
+<dt>You get</dt><dd>Correct prices and sectors for 2,593 stocks, 351 ETFs and 8,658 funds, and an explicit "unmatched" when it cannot be sure.</dd></dl></article>
+<article class="item"><header><h3>Expense-ratio matching, and fund NAV trust rules</h3></header><dl>
+<dt>What</dt><dd>AMFI's expense-ratio file is joined to funds only when the fund house matches and the normalised name matches as a set of words. A ratio of 0 means "not applicable", above 4% is a data error, and Direct above Regular is contradictory: all become unknown. NAV history from mfapi is stored only if it agrees with AMFI (same date, or the same ISIN and within 5% on a date at most 4 days earlier).</dd>
+<dt>Why</dt><dd>A wrong cost on a fund is a wrong recommendation. A false match is worse than a blank.</dd>
+<dt>You get</dt><dd>8,348 funds and ETFs with a defensible cost, and cost-aware ETF choice (for example TATAGOLD over GOLDBEES).</dd></dl></article>
+</section>
+
+<section id="signals"><header><h2>Signals: describing the past, and what changed</h2><p>All thresholds are named placeholders in the code (<code>signals-policy-p0-unreviewed</code>). Nothing here is a forecast.</p></header>
+<div class="tablewrap"><table><thead><tr><th>Signal</th><th>Maths</th><th>Why, and what you get</th></tr></thead><tbody>
+<tr><td>Trend</td><td>close / 200-day average - 1</td><td>Whether a price sits above or below its long-run level. Needs 253 closes.</td></tr>
+<tr><td>Momentum 12-1</td><td>close 21 sessions ago / close 252 sessions ago - 1</td><td>Skips the last month, the standard way to avoid short-term reversal. Highly correlated with trend, so the two are one vote, never two.</td></tr>
+<tr><td>Volatility</td><td>stdev of daily returns x sqrt(252), over 60 and 252 days</td><td>How jumpy a price is. The only price signal that held up in testing, and only as a description of risk.</td></tr>
+<tr><td>Worst fall</td><td>largest peak-to-trough fall of the compounded return path</td><td>What owning it felt like at its worst in the last year.</td></tr>
+<tr><td>Liquidity</td><td>median 20-day traded value, floor ₹1 crore a day; days stuck at a circuit limit</td><td>A gate, never a vote: can a small order go through without moving the price?</td></tr>
+</tbody></table></div>
+<article class="item"><header><h3>"What changed in what you hold" uses hysteresis, with margins measured on 587 stocks</h3></header><dl>
+<dt>What</dt><dd>State machines replayed over the stored history. A plain crossing of the 200-day average flips a median 7.5 times a year, which is noise. So: trend needs a 3% margin and 3 closes (median 1.7 changes a year); a drawdown enters at -20% and clears above -15% (median 1.3 a year); a deep one enters at -30%, clears above -25%; volatility rising enters when the 60-day is 1.5 times the 252-day and clears below 1.3.</dd>
+<dt>Why</dt><dd>An alert that fires constantly gets ignored. The margins were chosen by measuring real flip rates, and the plain-rule count is shown beside the rule's own.</dd>
+<dt>You get</dt><dd>A short list of real changes, each with its date, how often the plain rule would have cried wolf, and what you can do, starting with "keep things as they are".</dd></dl></article>
+<article class="item"><header><h3>The stock ranking: value, quality, momentum</h3><small>scoring/ranking.py, scoring/momentum.py</small><span class="pill warn">unvalidated, saved daily</span></header><dl>
+<dt>What</dt><dd>Three separate component scores, each the average of percentile ranks (0 to 100) of its measures within sector peers. Value: earnings yield (EPS over price), EBITDA over EV, book yield. Quality: ROE, margins, growth, low debt, dividend payout (trailing dividends over EPS, capped at 100%). Momentum: 12-1 and 6-1 on total return, counted as one vote. Percentiles are winsorised at 5 and 95, and small sectors are shrunk toward the whole universe by n/(n+4). Banks and insurers are ranked only against each other and never on debt or EV. The composite is an equal-weight mean (weights are configurable and printed). A stock missing a component is not ranked; nothing is zero-filled. Risk and data coverage are shown beside the rank, never inside it.</dd>
+<dt>Why</dt><dd>Value, quality and momentum are the three characteristics with the longest published record in Indian stocks. Ranks within peers avoid hand-set cut-offs, and keeping risk apart stops a volatile stock hiding behind a good score.</dd>
+<dt>You get</dt><dd>Plan stock picks: composite at or above 60, at most 2 per sector, no sector forced, at most 3% each, with the strongest and weakest measures, coverage and dates printed per name. A cross-check drops market-cap based measures for names whose figures disagree (INFY, HCLTECH, INDIGO were flagged) and names the reason.</dd>
+<dt class="limit">Limit</dt><dd class="limit">Fundamentals are Yahoo-backed and Nifty 50 only. A weekly job now refreshes them, adds one fiscal year of statements (total assets, operating cash flow, capex, net income) so accruals, cash profitability and free-cash-flow yield are active, and cross-checks trailing EPS against the sum of NSE's last four quarterly filings. A disagreement is a flag, never a correction. Only momentum could be back-tested (about +1.4% a month net versus the universe, interval includes zero). Value and quality are untested, and the composite is registered as live claim L9.</dd></dl></article>
+<article class="item"><header><h3>The earlier checklist score</h3><small>scoring/checklist.py</small><span class="pill">information only</span></header><dl>
+<dt>What</dt><dd>The first stock score: valuation 30, quality 35, debt 15, risk 20, with risk mixed into the number. Still computed and saved daily (claim L8) but no longer picks plan stocks.</dd>
+<dt>Why kept</dt><dd>So the old and new methods can both be tested against later prices.</dd></dl></article>
+</section>
+
+<section id="plan"><header><h2>How a plan is built, step by step</h2><p>Every step is deterministic and every number in it is printed with the plan.</p></header>
+<div class="tablewrap"><table><thead><tr><th>Risk band</th><th>Indian equity</th><th>International</th><th>Gold</th><th>Debt and liquid</th></tr></thead><tbody>
+<tr><td>Conservative</td><td>20%</td><td>0%</td><td>10%</td><td>70%</td></tr><tr><td>Moderate</td><td>45%</td><td>5%</td><td>10%</td><td>40%</td></tr><tr><td>Aggressive</td><td>65%</td><td>10%</td><td>10%</td><td>15%</td></tr></tbody></table></div>
+<p class="lede" style="margin:0">International weight moves into Indian equity, because Indian international ETFs trade at large premiums to their value and the app cannot measure the premium. If your risk answers are unknown, the mix is debt only.</p>
+<article class="item"><header><h3>The allocator</h3><small>allocation/plan.py</small></header><dl>
+<dt>What</dt><dd><b>1.</b> Targets in rupees from the band. <b>2.</b> Buy-only fill: close the most underweight bucket first, then share what is left by target weight. <b>3.</b> Buckets too small to clear the ₹1,000 minimum are merged into the bucket with the largest shortfall. <b>4.</b> Whole units only, rounding down; leftover rupees are spent one unit at a time on the leg furthest below its budget, never past a stock's 3% cap. <b>5.</b> Drift is flagged only beyond 5 percentage points. <b>6.</b> Money claimed for goals due within 3 years stays in the safe bucket first.</dd>
+<dt>Why</dt><dd>It never sells, because without your purchase lots the tax on a sale cannot be estimated. A buy-only fill fixes imbalance using new money alone.</dd>
+<dt>You get</dt><dd>A concrete list of units and rupees that balances to the paisa (money in equals holdings plus 0.3% assumed charges).</dd></dl></article>
+<article class="item"><header><h3>ETF choice: liquidity guard, then lowest cost</h3></header><dl>
+<dt>What</dt><dd>Among ETFs tracking the same index, only those trading at least 20% as much as the most traded are candidates; the lowest known expense ratio wins, an unknown cost never beats a known one, and with no known costs volume decides.</dd>
+<dt>Why</dt><dd>Cost compounds every year, but a cheap ETF you cannot trade is a trap.</dd>
+<dt>You get</dt><dd>For example NIFTYBEES at 0.04% a year, with the reason printed.</dd></dl></article>
+<article class="item"><header><h3>The safety gates every purchase must pass</h3><small>decisions/engine.py</small></header><dl>
+<dt>What</dt><dd>14 checks: data fresh, price known, lot size, minimum action ₹1,000, cost under 1% of the trade, funding, cash and budget available, money not claimed for goals, your restrictions, risk capacity, tax lots known, sale within holding, and concentration limits (one company at most 25%, one sector at most 40%, at least 80% of value freshly priced). A plan is compared against simply holding. For a buy from cash the comparison is always "worse than hold" by the metrics, so a plan's status rests on the hard gates alone.</dd>
+<dt>Why</dt><dd>The same gates serve the action lab and the allocator, so the two cannot disagree. The system is allowed, and expected, to say "no".</dd>
+<dt>You get</dt><dd>Ready, needs your input (with exactly what is missing), or blocked, plus a purchase-by-purchase table of every check.</dd></dl></article>
+<article class="item"><header><h3>Small amounts</h3></header><dl><dt>What</dt><dd>Below ₹1,003 no leg is produced. Instead: a liquid fund and a Nifty 50 index fund (bought by rupee amount, SIPs from about ₹100 in Angel, minimums differ by fund) and any ETF units that fit.</dd><dt>Why</dt><dd>Fixed charges swamp a ₹250 order, and a share cannot be split.</dd><dt>You get</dt><dd>Something useful at any size, and an honest reason stocks are skipped.</dd></dl></article>
+<article class="item"><header><h3>Risk and stress</h3><small>risk/exposure.py, stress.py, volatility.py</small></header><dl>
+<dt>What</dt><dd>Asset mix; issuer concentration with the Herfindahl index (sum of squared weights) and its inverse, "effective number of holdings"; sector weights from the instrument list or the market catalogue; months of expenses in cash. Portfolio volatility needs 252 aligned returns covering at least 80% of value, else it shows nothing. Stress scenarios shock equity one-for-one (beta 1): market -20%, Financial Services -20%, IT -25%.</dd>
+<dt>Why</dt><dd>Concentration and cash cushion are the risks a beginner most often misses, and each figure says how much of your money it actually covers.</dd>
+<dt>You get</dt><dd>A per-holding table of what a fall would do, and an explicit "outside the scenario" amount for what it cannot model (funds, gold).</dd>
+<dt class="limit">Limit</dt><dd class="limit">Correlation between holdings is marked unsupported rather than faked.</dd></dl></article>
+</section>
+
+<section id="personal"><header><h2>Your finances, and how they limit the plan</h2></header>
+<article class="item"><header><h3>Risk tolerance</h3><small>behavioural answers only</small></header><dl>
+<dt>What</dt><dd>Three questions score 0 to 100 each and are averaged. If a 20% fall: sell all 0, sell some 25, hold 60, buy more 100. Priority: protect capital 0, balanced 50, maximum growth 100. Largest fall you could accept: 0-10% 0, 10-20% 25, 20-30% 50, 30-50% 75, over 50% 100. Below 34 is conservative, below 67 moderate, otherwise aggressive.</dd>
+<dt>Why</dt><dd>How you behave in a fall decides whether a plan survives the first bad month.</dd><dt>You get</dt><dd>One band that picks the mix. It is a ceiling, never a substitute for capacity.</dd></dl></article>
+<article class="item"><header><h3>Capacity and constraints</h3></header><dl>
+<dt>What</dt><dd>Essential outgo = expenses + recorded loan EMIs. Reserve coverage = reserve / outgo, compared with your target months. Also surplus after essentials and loan payments over income. The effective limit is the strictest of capacity, goal horizon (goals due within 3 years), your exclusions and tolerance. Anything unknown restricts added risk.</dd>
+<dt>Why</dt><dd>What you can afford to lose is a different question from what you feel comfortable losing.</dd><dt>You get</dt><dd>Plain reasons a plan is blocked ("reserve covers 2 months; target is 6").</dd></dl></article>
+<article class="item"><header><h3>Goals</h3><small>goals/projection.py, services/cash_flow_engine.py</small></header><dl>
+<dt>What</dt><dd>A month-by-month Decimal ledger where every month satisfies <code>balance after = balance before + contribution + growth - fees</code>. Low, base and high scenarios at 4%, 8% and 11% a year. A search (0.1% steps up to 100%) finds the return you would need, and a back-solve finds the monthly amount needed. Money can be stated in today's rupees with an inflation assumption.</dd>
+<dt>Why</dt><dd>A goal outlook must be reproducible and must not hide an assumption.</dd><dt>You get</dt><dd>"On track under the base assumption" or "needs about 62.9% a year": an illustration, never a probability.</dd></dl></article>
+</section>
+
+<section id="outside"><header><h2>Does outside research support these choices?</h2><p>Checked 2 October against published work. Supports the direction; none of it proves this particular score works.</p></header>
+<article class="item"><header><h3>Value, quality, momentum in India</h3><span class="pill ok">supported, with limits</span></header><dl>
+<dt>Found</dt><dd>1993 to 2013: momentum earned about 21% a year, value about 6%, size about nothing (<a href="https://journals.sagepub.com/doi/full/10.1177/0256090917733848">Agarwalla, Jacob and Varma</a>). A quality-minus-junk factor earned about 0.92% a month of alpha, and a long-only quality portfolio 0.69%, driven by profitability and payout, and it works within large caps (<a href="https://www.iima.ac.in/sites/default/files/2022-12/Wp-2022-11-01.pdf">IIMA working paper, 2022</a>).</dd>
+<dt>So</dt><dd>All three components have an Indian record. Value is the weakest and was poor in 2011 to 2020, so equal weights are not backed by evidence that value deserves a third. Payout is a driver of quality there, so it was added to our quality score (method version p2).</dd></dl></article>
+<article class="item"><header><h3>Momentum can crash</h3><span class="pill warn">risk to know</span></header><dl>
+<dt>Found</dt><dd>Momentum has rare, deep losses, mostly when the market rebounds after a fall (<a href="https://www.nber.org/system/files/working_papers/w20439/w20439.pdf">Daniel and Moskowitz</a>). One blog back-test of the NSE momentum index finds the gain sits in less-liquid names (<a href="https://backtestindia.com/blog/momentum-factor-india-liquidity-premium-scaled-turnover">backtestindia</a>, not peer reviewed). Our own test saw the same pattern.</dd>
+<dt>So</dt><dd>Nifty 50 is the most liquid slice, so expect a weaker momentum effect than headline numbers.</dd></dl></article>
+<article class="item"><header><h3>Why index funds stay the core</h3><span class="pill ok">supported</span></header><dl>
+<dt>Found</dt><dd>Over five years 92.9% of Indian large-cap funds trailed their benchmark in the mid-2023 <a href="https://www.spglobal.com/spdji/en/documents/spiva/spiva-india-scorecard-mid-year-2023.pdf">SPIVA India scorecard</a>.</dd>
+<dt>So</dt><dd>Stocks stay a capped satellite (3% each) and index ETFs stay the base. Equal-weight legs follow DeMiguel, Garlappi and Uppal (2009): optimisers often fail to beat 1/N once estimation error counts, as discussed in <a href="http://www.ledoit.net/Goldilocks_RFS_2017.pdf">Ledoit and Wolf</a>. Their shrinkage is used here only to describe risk.</dd></dl></article>
+<article class="item"><header><h3>Accruals</h3><span class="pill">inactive, fine</span></header><dl>
+<dt>Found</dt><dd>The accruals effect has faded in the US since about 2002 (<a href="https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1501020">Green, Hand and Soliman</a>).</dd>
+<dt>So</dt><dd>Leaving it switched off for lack of inputs costs little.</dd></dl></article>
+</section>
+
+<section id="evidence"><header><h2>The evidence machinery: does any of it work?</h2><p>This is the part most apps skip. It exists so that a signal gains influence only by proving itself.</p></header>
+<article class="item"><header><h3>Rank IC, one observation per date</h3></header><dl>
+<dt>What</dt><dd>On each month-end, rank stocks by a feature and correlate that rank (Spearman) with the next 21 sessions' return. The unit of evidence is a date, not a stock, because stocks on the same day share the market's move.</dd>
+<dt>Why</dt><dd>Treating 580 stocks as independent would overstate the evidence enormously.</dd><dt>You get</dt><dd>A fair answer to "did higher-ranked stocks do better?"</dd></dl></article>
+<article class="item"><header><h3>Honest statistics</h3></header><dl>
+<dt>What</dt><dd>Student t interval through a hand-written incomplete beta function; Bonferroni correction (alpha 0.05 divided by the number of claims, now 8); a 5,000-resample bootstrap of per-date results with a fixed seed (blocks of consecutive dates are supported); the minimum detectable effect at 80% power; a verdict ladder (no data, too early, underpowered, no evidence, negative, suggestive in the past, promising, earned).</dd>
+<dt>Why</dt><dd>Test many ideas and one will look good by luck. The correction and the "cannot tell" verdict stop that.</dd><dt>You get</dt><dd>Findings such as "the study could not have seen an effect smaller than 0.068", instead of false confidence.</dd></dl></article>
+<article class="item"><header><h3>Frozen designs, and two kinds of evidence</h3></header><dl>
+<dt>What</dt><dd>Each study design is hashed before any result exists. The backtest (45 month-ends, about 580 stocks, five years) can never reach "earned", because it is survivor-biased, price-based and partly in-sample. Live evidence is the only kind that can: each signal and score is stored when made, entered at the next close, scored 21 sessions later, and needs 24 separate dates (about two years). The live registry is version 4 with 8 claims (trend, momentum, calm stocks, volatility persistence, forecast, trend breaks held, checklist score, stock ranking) plus one plan-accounting line.</dd>
+<dt>Why</dt><dd>You cannot move the goalposts after seeing results.</dd><dt>You get</dt><dd>A scorecard that says what is proven: so far, none of the return signals, and only volatility persistence in the past data.</dd></dl></article>
+</section>
+
+<section id="engineering"><header><h2>Engineering that protects your data</h2></header>
+<div class="two">
+<article class="item"><header><h3>Insert-only, versioned facts</h3></header><dl><dt>What</dt><dd>Signals, forecasts, scores, suggestions, plans and outcomes are inserted once and never edited. A method change is a new version.</dd><dt>You get</dt><dd>Anything can be checked against what happened later.</dd></dl></article>
+<article class="item"><header><h3>Job queue without Celery</h3></header><dl><dt>What</dt><dd>A Postgres table polled by the worker, claimed with <code>SELECT ... FOR UPDATE SKIP LOCKED</code>, a 300-second lease, a fence token so a stale worker cannot overwrite a newer result, bounded retries.</dd><dt>You get</dt><dd>No Redis to run, and a crash never double-processes.</dd></dl></article>
+<article class="item"><header><h3>Idempotent by hashing</h3></header><dl><dt>What</dt><dd>The same inputs give the same stored record: portfolio state hash, plan inputs hash, import content hash and idempotency keys.</dd><dt>You get</dt><dd>Pressing a button twice or retrying a failed request never duplicates anything.</dd></dl></article>
+<article class="item"><header><h3>Read-only broker client</h3></header><dl><dt>What</dt><dd>Hand-written, no Angel SDK, one allowed host, a fixed list of calls (login, profile, holdings, positions, funds, quote, candles). Your client code is stored only as a keyed HMAC fingerprint; the PIN and TOTP are typed in your terminal and never stored.</dd><dt>You get</dt><dd>The app cannot place, change or cancel an order, and a leak of the database would not reveal your account.</dd></dl></article>
+<article class="item"><header><h3>Local-only by construction</h3></header><dl><dt>What</dt><dd>Everything binds to 127.0.0.1; cross-site writes are rejected by an origin check; the fetcher refuses private addresses.</dd><dt>You get</dt><dd>Nothing on your network can reach your portfolio.</dd></dl></article>
+<article class="item"><header><h3>Money is Decimal</h3></header><dl><dt>What</dt><dd>Every rupee amount is exact decimal, rounded to the paisa at defined points, with conservation checks (money in equals holdings plus charges).</dd><dt>You get</dt><dd>Totals that balance exactly.</dd></dl></article>
+</div></section>
+
+<section id="research"><header><h2>Research: from a question to a verified report</h2></header>
+<article class="item"><header><h3>The pipeline</h3></header><dl>
+<dt>What</dt><dd><b>Discover</b> sources (Gemini search if it has quota, else Google News RSS and Wikipedia) → <b>fetch</b> safely (resolve DNS, require a public address, pin that address, follow redirects by hand, cap the bytes; HTML, text and RSS only) → <b>extract</b> short passages → <b>claims</b> pulled by the language model → <b>verify</b> each claim against the passage it came from (supported, unsupported, unknown, contradicted) → <b>write</b> the report only if the evidence verifies, with named gaps.</dd>
+<dt>Why</dt><dd>A model that can browse can also be fooled by a page. Fetched text is treated as data, never as instructions.</dd>
+<dt>You get</dt><dd>A short report with supporting and opposing evidence, each item with publisher and date, and a list of what is missing.</dd>
+<dt class="limit">Limit</dt><dd class="limit">Headlines are not filings, and PDF text extraction is not installed, so annual reports cannot be read yet.</dd></dl></article>
+</section>
+</div>

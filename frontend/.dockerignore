@@ -1,0 +1,15 @@
+# V3 Phase 11 packaging pass: frontend/Dockerfile does `COPY . .` with build
+# context `./frontend` -- without this, local node_modules/.next/env files
+# get copied in before `npm install`/`npm run build` run their own fresh
+# versions, bloating the build context and risking a stale/host-specific
+# node_modules shadowing the image's own install.
+
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store

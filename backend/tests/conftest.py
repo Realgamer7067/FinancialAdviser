@@ -16,7 +16,16 @@ from app.main import app
 
 
 @pytest.fixture(autouse=True)
-def _force_hermetic_settings(monkeypatch):
+def _force_hermetic_settings(monkeypatch, tmp_path):
+    # Never touch the real Angel session file / keys (a live session on this machine must not
+    # leak into tests, and tests must never write to it).
+    monkeypatch.setattr(settings, "angel_session_dir", str(tmp_path / "angel-session"))
+    monkeypatch.setattr(settings, "inline_reviews", False)  # tests run reviews explicitly
+    monkeypatch.setattr(settings, "scheduler_enabled", False)
+    monkeypatch.setattr(settings, "legacy_pipeline_enabled", True)  # legacy tests exercise it; see test_legacy_flag.py for the default
+    monkeypatch.setattr(settings, "angel_api_key", "")
+    monkeypatch.setattr(settings, "angel_fingerprint_key", "")
+    monkeypatch.setattr(settings, "angel_proxy_url", "") if hasattr(settings, "angel_proxy_url") else None
     # Tests must never depend on this machine's real .env -- a deployment's
     # `.env` can legitimately set DEMO_MODE=false and a real QWEN_API_KEY
     # (this repo's does), which would make "unmocked" providers in tests fire
@@ -24,6 +33,25 @@ def _force_hermetic_settings(monkeypatch):
     # fallback paths the tests are actually designed to exercise.
     monkeypatch.setattr(settings, "demo_mode", True)
     monkeypatch.setattr(settings, "qwen_api_key", "")
+    monkeypatch.setattr(settings, "qwen_api_key_pool", "")
+    # Same reasoning, for app/services/web_search.py (added 2026-09-16):
+    # discover_urls reads settings.gemini_api_key directly, not through the
+    # qwen_* provider above -- left unreset, any test that leaves a research
+    # branch's URLs empty (find_sources defaults True) would make a REAL
+    # live Gemini search call using whatever key this machine's real .env
+    # happens to have. Found by inspection, not by a test actually failing
+    # from it -- test_research_api.py's existing test only avoided it by
+    # coincidence (it supplies explicit URLs for all 3 branches).
+    monkeypatch.setattr(settings, "gemini_api_key", "")
+    monkeypatch.setattr(settings, "web_search_fallback", False)   # the keyless fallback would make a real network call; tests that cover it turn it on and mock httpx
+    # Same reasoning as above, for the test/rehearsal-only overrides added
+    # 2026-09-16 for testing against a restored Postgres dump (see
+    # scripts/restore_postgres_backup.sh) -- a real deployment's .env can
+    # legitimately set these, and left unreset they silently swap which
+    # candle source/staleness rule the hermetic suite exercises.
+    monkeypatch.setattr(settings, "market_data_source_override", None)
+    monkeypatch.setattr(settings, "market_data_staleness_override_days", None)
+    monkeypatch.setattr(settings, "fundamentals_staleness_override_hours", None)
 
 
 @pytest_asyncio.fixture
