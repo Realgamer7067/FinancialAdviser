@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.single_user import SINGLE_USER_ID
 from app.models.system import RecommendationJob
@@ -39,6 +40,9 @@ def _to_response(job: RecommendationJob) -> JobStatusResponse:
 
 @router.post("", status_code=202, response_model=JobStatusResponse)
 async def create_job(db: AsyncSession = Depends(get_db)):
+    if not settings.legacy_pipeline_enabled:
+        raise HTTPException(409, "The old Nifty analysis is turned off. Your portfolio reviews run automatically (see Overview). "
+                                 "Set LEGACY_PIPELINE_ENABLED=true to use it.")
     job = RecommendationJob(user_id=SINGLE_USER_ID, status="queued", created_at=utcnow())
     db.add(job)
     await db.commit()

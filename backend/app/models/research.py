@@ -47,6 +47,10 @@ class ResearchSession(Base, UUIDPKMixin):
     budget_envelope: Mapped[dict] = mapped_column(JSON)  # {"max_searches", "max_fetches", "max_tokens", "deadline_seconds", ...}
     budget_consumed: Mapped[dict] = mapped_column(JSON, default=dict)  # same keys, running totals
     named_gaps: Mapped[list] = mapped_column(JSON, default=list)  # filled when a branch ends "partial"/"unavailable"
+    # Persisted by the research API/thesis refresh so a later GET can restore them (previously they existed
+    # only in the synchronous POST response). Null = never recorded (older sessions).
+    verification: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    contradictions: Mapped[list | None] = mapped_column(JSON, nullable=True)
     budget_exhausted_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

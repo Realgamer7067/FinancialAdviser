@@ -164,7 +164,7 @@ function PortfolioInner() {
 
           {allocation && (
             <div className="space-y-3">
-              <div className="overflow-x-auto">
+              <div tabIndex={0} className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-text-muted">

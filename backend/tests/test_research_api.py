@@ -55,9 +55,9 @@ async def test_post_sessions_reaches_ready_to_publish(client, monkeypatch):
     assert body2["id"] == session_id
     assert body2["state"] == "ready_to_publish"
     assert len(body2["branches"]) == 3
-    # Verification/contradictions are not persisted -- GET must not fabricate them.
-    assert body2["verification"] is None
-    assert body2["contradictions"] == []
+    # Phase 09: verification and contradictions are now persisted, so a re-query restores exactly what POST returned.
+    assert body2["verification"] == body["verification"]
+    assert body2["contradictions"] == body["contradictions"]
 
 
 async def test_get_unknown_session_returns_404(client):

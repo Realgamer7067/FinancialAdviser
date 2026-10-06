@@ -88,7 +88,7 @@ function SaferAlternativesInner() {
                   )}
                 </dl>
                 <p className="mt-2 text-xs text-text-muted">{item.risk_note}</p>
-                {item.eligibility_note && <p className="mt-1 text-xs text-text-muted/70">{item.eligibility_note}</p>}
+                {item.eligibility_note && <p className="mt-1 text-xs text-text-muted">{item.eligibility_note}</p>}
               </Card>
             </motion.div>
           );

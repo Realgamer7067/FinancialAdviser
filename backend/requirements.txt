@@ -6,7 +6,7 @@ asyncpg==0.29.0
 psycopg2-binary==2.9.9
 pydantic==2.9.2
 pydantic-settings==2.5.2
-httpx==0.27.2
+httpx[socks]==0.27.2
 feedparser==6.0.11
 pandas==2.2.3
 numpy==2.0.2
@@ -35,6 +35,7 @@ safetensors==0.6.2
 stable-baselines3==2.5.0
 gymnasium==0.29.1
 
+python-multipart==0.0.20
 pytest==8.3.3
 pytest-asyncio==0.24.0
 respx==0.21.1

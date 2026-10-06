@@ -1,0 +1,2 @@
+asset_type,isin,symbol,description,units,value,valuation_date,cost_basis,locked,ownership
+listed_equity,INE467B01029,TCS,FICTIONAL TCS holding,10,30000,invalid-date,,false,sole

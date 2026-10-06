@@ -1,0 +1,24 @@
+Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+
+Open Ended Schemes(Debt Scheme - Liquid Fund)
+
+HDFC Mutual Fund
+
+119091;INF179KB1HP9;-;HDFC Liquid Fund;Direct Plan;Growth Option;5593.1126;30-Sep-2026
+100868;INF179KB1HK0;-;HDFC Liquid Fund;Regular Plan;Growth Option;5526.8863;30-Sep-2026
+100875;-;INF179KB1IC5;HDFC Liquid Fund;Regular Plan;IDCW Daily;1019.82;30-Sep-2026
+119089;-;INF179KB1HV7;HDFC Liquid Fund;Direct Plan;IDCW Daily;1019.82;30-Sep-2026
+100876;INF179KB1HM6;INF179KB1HL8;HDFC Liquid Fund;Regular Plan;IDCW Monthly;1026.6551;30-Sep-2026
+119090;INF179KB1HO2;INF179KB1HQ7;HDFC Liquid Fund;Direct Plan;IDCW Monthly;1026.6606;30-Sep-2026
+100874;INF179KB1ID3;-;HDFC Liquid Fund;Regular Plan;IDCW Plan Weekly;1031.3863;30-Sep-2026
+119088;-;-;HDFC Liquid Fund;Direct Plan;IDCW Weekly;1031.3918;30-Sep-2026
+100878;INF179K01KP9;-;HDFC Liquid Fund;;;10;14-Apr-2015
+100881;INF179K01KS3;-;HDFC Liquid Fund;;;10;14-May-2012
+100872;INF179K01KQ7;-;HDFC Liquid Fund;;;10.0000;17-Dec-2012
+Open Ended Schemes(Equity Scheme - Large Cap Fund)
+
+ICICI Prudential Mutual Fund
+
+108467;INF109K01BN0;-;ICICI Prudential Large Cap Fund (erstwhile Bluechip Fund);;;37.59;24-Apr-2020
+120585;INF109K014L5;INF109K015L2;ICICI Prudential Large Cap Fund (erstwhile Bluechip Fund);Direct Plan;IDCW;57.28;30-Sep-2026
+108466;INF109K01BL4;-;ICICI Prudential Large Cap Fund (erstwhile Bluechip Fund);Regular Plan;Growth;102.44;30-Sep-2026

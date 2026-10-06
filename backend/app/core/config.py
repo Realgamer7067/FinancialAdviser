@@ -20,6 +20,36 @@ class Settings(BaseSettings):
     demo_mode: bool = True
     environment: str = "development"
     timezone: str = "Asia/Kolkata"
+    allow_forwarded_origins: bool = False
+    # Run portfolio review jobs in the API process right after they are queued (they are cheap,
+    # pure computation). Jobs still go through the typed job table and the fenced publication.
+    inline_reviews: bool = True
+    # Background scheduler in the API process: one market-close pass per weekday (after 16:00 IST).
+    # Research source discovery: when Gemini search grounding returns nothing (its free-tier quota is usually exhausted), try a keyless search.
+    web_search_fallback: bool = True
+    # Stock ranking (value / quality / momentum). An UNVALIDATED policy: equal weights by default, "value:1,quality:1,momentum:1"; the floor is the
+    # composite a stock needs to be a candidate for new money.
+    stock_rank_weights: str = "value:1,quality:1,momentum:1"
+    stock_rank_floor: float = 60.0
+    scheduler_enabled: bool = True
+    # The pre-V3 Nifty recommendation pipeline (Qwen council, Kronos, FinBERT...) is OFF by default: it is slow,
+    # costs LLM calls, and is not part of the portfolio journey. Turn on only to use the old dashboard's Run Analysis.
+    legacy_pipeline_enabled: bool = False
+    scheduler_interval_seconds: int = 600
+
+    # Angel One SmartAPI (read-only). Secrets come from .env only, never the DB.
+    angel_api_key: str = ""
+    # Persistent keyed-HMAC key for broker-account fingerprints. Losing or
+    # changing it makes the same broker account look new (duplicate positions).
+    angel_fingerprint_key: str = ""
+    # Directory for the short-lived session file shared by API and worker.
+    # Empty = ~/.local/state/pie (outside the repository).
+    angel_session_dir: str = ""
+    angel_client_public_ip: str = "127.0.0.1"
+    # Egress proxy for ALL Angel requests, e.g. socks5://127.0.0.1:1080 (an SSH -D tunnel
+    # to a VPS whose static IP is whitelisted on the SmartAPI app). Fail-closed: when set,
+    # a dead tunnel means "unavailable", never a direct connection from this machine.
+    angel_proxy_url: str = ""
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/equity_research"
     sync_database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/equity_research"
@@ -75,6 +105,9 @@ class Settings(BaseSettings):
     # a real distribution KronosModel calls predict() this many times
     # independently instead. CPU cost scales linearly with this value.
     kronos_sample_count: int = 8
+    # Nightly Kronos forecasts for a shortlist (stored point-in-time for later scoring; counted 0 in any check).
+    signals_kronos_enabled: bool = True
+    signals_kronos_horizon: str = "30d"
     finbert_model_id: str = "ProsusAI/finbert"
 
     worker_poll_interval_seconds: int = 5

@@ -1,0 +1,18 @@
+{
+  "monthly_income": "60000",
+  "income_stability": "stable",
+  "monthly_essential_expenses": "20000",
+  "dependents": 0,
+  "emergency_reserve_amount": "100000",
+  "emergency_reserve_months_target": "6",
+  "monthly_investable_surplus": "10000",
+  "one_time_available": "10000",
+  "near_term_obligations": [],
+  "employer_exposure": null,
+  "knowledge_level": "beginner",
+  "tolerance_answers": {
+    "portfolio_drop_20pct_reaction": "buy_more",
+    "priority": "maximum_growth",
+    "loss_tolerance": "50_plus"
+  }
+}

@@ -68,16 +68,22 @@ class KronosModel(TimeSeriesModel):
         return KronosModel._predictor
 
     async def forecast(self, symbol: str, candles: list[Candle], horizon: str) -> TimeSeriesForecast | None:
-        bars = _HORIZON_TO_BARS.get(horizon)
-        if bars is None or len(candles) < 30:
-            return None  # insufficient history -- don't guess (Section 50)
-
         try:
-            sample_closes = await asyncio.to_thread(self._run, symbol, candles, bars, horizon)
+            return await self.forecast_strict(symbol, candles, horizon)
         except Exception:
             # Model unavailable / package API mismatch -- caller must treat this
             # as a missing signal, not crash the whole pipeline (Section 50).
             return None
+
+    async def forecast_strict(self, symbol: str, candles: list[Candle], horizon: str) -> TimeSeriesForecast | None:
+        """Same as forecast() but lets model/package/weights errors propagate. A silent None for a missing vendor
+        path or missing weights is indistinguishable from "no signal" forever, so callers that need to know WHY
+        (the nightly forecast job) use this. Returns None only for an unknown horizon or too little history."""
+        bars = _HORIZON_TO_BARS.get(horizon)
+        if bars is None or len(candles) < 30:
+            return None  # insufficient history -- don't guess (Section 50)
+
+        sample_closes = await asyncio.to_thread(self._run, symbol, candles, bars, horizon)
 
         last_close = candles[-1].close
         sample_returns = np.array([(c - last_close) / last_close for c in sample_closes])

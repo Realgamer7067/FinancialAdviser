@@ -26,6 +26,7 @@ from app.core.db import AsyncSessionLocal, engine
 from app.core.migration_barrier import assert_migration_head
 from app.models.system import RecommendationJob
 from app.pipelines.publication import StalePublicationError
+from app.portfolio_intelligence.jobs import claim_next_portfolio_job, process_portfolio_job
 from app.pipelines.recommendation_pipeline import PipelineError, run_recommendation_pipeline
 from app.utils.time import utcnow
 
@@ -134,8 +135,24 @@ async def run_worker_loop() -> None:
     # crashing confusingly mid-pipeline on a missing/renamed column.
     async with engine.connect() as conn:
         await assert_migration_head(conn)
-    logger.info("worker started (poll interval=%ss, demo_mode=%s)", settings.worker_poll_interval_seconds, settings.demo_mode)
+    try:
+        from app.portfolio_intelligence.market import holidays as _hol
+
+        async with AsyncSessionLocal() as _db:
+            await _hol.load_calendar(_db)
+    except Exception:  # noqa: BLE001 -- weekdays only until a calendar is stored
+        logger.warning("could not load the holiday calendar; using weekdays only")
+    logger.info("worker started (poll interval=%ss, demo_mode=%s, legacy_pipeline=%s)", settings.worker_poll_interval_seconds,
+                settings.demo_mode, "ON" if settings.legacy_pipeline_enabled else "off")
     while True:
+        async with AsyncSessionLocal() as db:
+            pjob = await claim_next_portfolio_job(db)
+        if pjob is not None:
+            await process_portfolio_job(pjob.id, pjob.worker_token)
+            continue
+        if not settings.legacy_pipeline_enabled:
+            await asyncio.sleep(settings.worker_poll_interval_seconds)
+            continue
         async with AsyncSessionLocal() as db:
             job = await _claim_next_job(db)
         if job is None:

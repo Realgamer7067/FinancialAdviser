@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { api, ApiError } from "@/lib/api";
 import type { RiskProfile } from "@/lib/types";
@@ -60,12 +61,14 @@ export default function OnboardingPage() {
     return (
       <motion.div initial="hidden" animate="visible" variants={fadeInUp} className="mx-auto max-w-md">
         <Card className="space-y-4">
-          <h1 className="text-lg font-semibold text-text-primary">Your investor profile is ready</h1>
+          <h1 className="text-lg font-semibold text-text-primary">Earlier research profile saved</h1>
           <RiskGauge value={result.risk_score} label={result.risk_profile} />
           <p className="text-sm text-text-muted">Horizon: {result.investment_horizon_years} years</p>
-          <Button onClick={() => router.push("/dashboard")} className="w-full">
-            Go to dashboard
+          <p className="text-sm text-text-muted">Your portfolio reviews use the Financial profile, not this.</p>
+          <Button onClick={() => router.push("/finances")} className="w-full">
+            Open Financial profile
           </Button>
+          <Link href="/dashboard" className="block text-center text-sm font-medium text-accent hover:text-accent-hover">Go to earlier research dashboard</Link>
         </Card>
       </motion.div>
     );
@@ -80,8 +83,11 @@ export default function OnboardingPage() {
       className="mx-auto max-w-xl space-y-8"
     >
       <motion.div variants={fadeInUp}>
-        <h1 className="text-xl font-semibold text-text-primary">Tell us about your finances</h1>
-        <p className="text-sm text-text-muted">No jargon, just forms — this builds your investor profile.</p>
+        <h1 className="text-xl font-semibold text-text-primary">Earlier investor questionnaire</h1>
+        <p className="text-sm text-text-muted">
+          This configures the earlier stock-candidate research only. It does not set the limits used when your portfolio is
+          reviewed; those come from your <Link href="/finances" className="font-medium text-accent hover:text-accent-hover">Financial profile</Link>.
+        </p>
       </motion.div>
 
       <motion.fieldset variants={fadeInUp} className="space-y-3 rounded-lg border border-border bg-surface p-4 shadow-sm">

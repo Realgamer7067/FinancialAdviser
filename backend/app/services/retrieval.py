@@ -78,7 +78,8 @@ class FetchedDocument:
 
 
 # Content types this module knows how to extract text from.
-_SUPPORTED_CONTENT_TYPES = {"text/html", "text/plain", "application/pdf"}
+_FEED_CONTENT_TYPES = {"application/rss+xml", "application/atom+xml", "application/xml", "text/xml"}
+_SUPPORTED_CONTENT_TYPES = {"text/html", "text/plain", "application/pdf"} | _FEED_CONTENT_TYPES
 
 # Redirect status codes we follow manually.
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
@@ -358,9 +359,38 @@ def _extract_text(content_type: str, raw_bytes: bytes, policy: FetchPolicy) -> s
         return parser.get_text()
     if content_type == "application/pdf":
         return _extract_pdf_text(raw_bytes, policy)
+    if content_type in _FEED_CONTENT_TYPES:
+        return _extract_feed_text(_decode_bytes(raw_bytes))
     # _SUPPORTED_CONTENT_TYPES should make this unreachable, but never
     # silently return something that looks like real extracted text.
     raise RetrievalRejected(f"no text extractor available for content type {content_type!r}")
+
+
+def _extract_feed_text(xml: str, max_items: int = 20) -> str:
+    """RSS/Atom headlines as plain text, one paragraph per item: "Title (Publisher, date)". Regex only: no XML parser is run on untrusted
+    input (entity-expansion attacks), and nothing in a feed is ever treated as an instruction."""
+    import html
+    import re
+
+    def tag(block: str, name: str) -> str:
+        m = re.search(rf"<{name}[^>]*>(.*?)</{name}>", block, re.S)
+        if not m:
+            return ""
+        text = re.sub(r"<!\[CDATA\[|\]\]>", "", m.group(1))
+        return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", html.unescape(text)))).strip()
+
+    paragraphs = []
+    for block in re.findall(r"<(?:item|entry)\b[^>]*>(.*?)</(?:item|entry)>", xml, re.S)[:max_items]:
+        title = tag(block, "title")
+        if not title:
+            continue
+        publisher = tag(block, "source")
+        when = tag(block, "pubDate") or tag(block, "updated") or tag(block, "published")
+        meta = ", ".join(x for x in (publisher, when) if x)
+        paragraphs.append(f"{title} ({meta})" if meta else title)
+    if not paragraphs:
+        raise RetrievalRejected("feed contained no readable items")
+    return "\n\n".join(paragraphs)
 
 
 def _extract_pdf_text(raw_bytes: bytes, policy: FetchPolicy) -> str:

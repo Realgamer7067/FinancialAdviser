@@ -53,7 +53,7 @@ export default function AdminPage() {
 
           <motion.div variants={fadeInUp}>
             <Card title="Data sources">
-              <div className="overflow-x-auto">
+              <div tabIndex={0} className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="text-text-muted">
                     <tr>
@@ -87,7 +87,7 @@ export default function AdminPage() {
 
           <motion.div variants={fadeInUp}>
             <Card title="Recent recommendation jobs">
-              <div className="overflow-x-auto">
+              <div tabIndex={0} className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="text-text-muted">
                     <tr>

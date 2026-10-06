@@ -19,7 +19,7 @@ export default function Card({
         className
       )}
     >
-      {title && <h3 className="mb-2 font-medium text-text-primary">{title}</h3>}
+      {title && <h2 className="mb-2 font-medium text-text-primary">{title}</h2>}
       {children}
     </div>
   );

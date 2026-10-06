@@ -18,10 +18,12 @@ export default function AllocationDonut({ allocations }: { allocations: Record<s
   }
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={fadeIn} style={{ width: "100%", height: 240 }}>
+    <>
+    <p className="sr-only">Allocation: {data.map((d) => `${d.symbol} ${d.weight.toFixed(1)}%`).join(", ")}.</p>
+    <motion.div aria-hidden="true" initial="hidden" animate="visible" variants={fadeIn} style={{ width: "100%", height: 240 }}>
       <ResponsiveContainer>
-        <PieChart>
-          <Pie data={data} dataKey="weight" nameKey="symbol" innerRadius="55%" outerRadius="90%" paddingAngle={1} animationDuration={500}>
+        <PieChart accessibilityLayer={false}>
+          <Pie rootTabIndex={-1} data={data} dataKey="weight" nameKey="symbol" innerRadius="55%" outerRadius="90%" paddingAngle={1} animationDuration={500}>
             {data.map((_, i) => (
               <Cell key={i} fill={COLORS[i % COLORS.length]} />
             ))}
@@ -30,5 +32,6 @@ export default function AllocationDonut({ allocations }: { allocations: Record<s
         </PieChart>
       </ResponsiveContainer>
     </motion.div>
+    </>
   );
 }

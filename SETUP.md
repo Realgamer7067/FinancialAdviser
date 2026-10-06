@@ -1,8 +1,6 @@
 # Setup & Usage Guide
 
-This walks through actually running the platform and using it end to end, not just
-listing commands. See `README.md` for the one-paragraph quickstart and architecture
-summary; this doc is the longer version.
+This guide includes setup and historical development notes. Start with [README.md](README.md) for the current Financial Advisor portfolio workflow and [ARCHITECTURE.md](ARCHITECTURE.md) for current versus earlier modules.
 
 ## 1. What you need (and what you don't)
 
@@ -17,8 +15,7 @@ summary; this doc is the longer version.
 Market data comes from Yahoo Finance -- no account, no API key, no KYC. `DEMO_MODE=true`
 still exists for a fully offline/synthetic run; set it `false` to use real Yahoo Finance data.
 
-You can get a fully working app with **zero external accounts** by leaving `.env`'s
-`DEMO_MODE=true` and `QWEN_API_KEY` blank.
+The earlier demo-provider path can run without external accounts with `DEMO_MODE=true` and blank model keys. The newer `/api/v4` portfolio screens may start empty and need manual/CSV holdings and fictional profile facts for rehearsal. Demo mode does not make every broker, catalogue or research integration offline.
 
 ## 2. First run (Docker)
 
@@ -36,6 +33,12 @@ Open:
 - Frontend: http://localhost:3000
 - Backend API docs: http://localhost:8000/docs
 - Admin/debug: http://localhost:8000/admin/debug
+
+Private mode: host ports 3000, 8000 and 5432 are bound to 127.0.0.1 only; PostgreSQL retains a loopback host port for local tools. Set a
+non-default `POSTGRES_PASSWORD` in `.env` before `docker compose up` (it does not change
+the password of an existing `postgres_data` volume -- rotate with `ALTER USER` or recreate
+the volume). Verify from another machine that ports 3000/8000/5432 refuse connections
+before importing real holdings.
 
 ## 3. First run (no Docker)
 
@@ -58,6 +61,8 @@ npm run dev
 Frontend at http://localhost:3000, backend at http://localhost:8000.
 
 ## 4. Using the app as a user
+
+> Current presentation path: Holdings → Financial profile → Goals/Risk → Plan new investment or Compare a change. The older recommendation flow below is retained but disabled by default with `LEGACY_PIPELINE_ENABLED=false`. See [the demo guide](docs/presentation/DEMO_AND_REVIEWER_QA.md) for a rehearsed final-review sequence.
 
 This is the actual workflow the UI walks you through -- there is no chat interface
 anywhere; everything is forms and cards (by design, see build plan Section 3).
@@ -383,3 +388,33 @@ foreign keys, extensions) a restore rehearsal should still include by hand.
 dumps can contain TrueData-sourced rows (`market_candles.source = 'truedata'`)
 and Postgres role password hashes -- `*.sql` and `backups/` are gitignored at
 the repo root specifically for this. Keep any dump file local-only.
+
+
+## Angel One (read-only) connection
+
+1. In `.env` set `ANGEL_API_KEY` (from your SmartAPI app) and `ANGEL_FINGERPRINT_KEY`
+   (`openssl rand -hex 32`, keep a backup).
+2. Run migrations (`alembic upgrade head`) and start API and worker (`run.sh` does both). Local processes share the session in `~/.local/state/pie`. Current Docker Compose mounts that host directory read-only into both services at `/angel-session`; the local-only-worker limitation from the initial integration no longer applies.
+3. In your own terminal: `python -m app.portfolio_intelligence.sources.angel.setup connect`
+   (from `backend/`, venv active). Enter client code, PIN and the current TOTP when
+   prompted. Nothing secret is printed or stored except the session tokens, which expire at
+   midnight IST. `... setup disconnect` clears the session; imported holdings stay.
+4. Open Holdings, press "Sync now". A sync that finds unreadable rows or a >1% mismatch
+   with Angel's own total is stored as *partial* and does not replace your last complete
+   import.
+
+## Running everything in Docker (private, this machine only)
+
+`docker compose up -d --build` starts Postgres, the API (with the after-close scheduler), the worker and the frontend,
+all bound to 127.0.0.1. Things to know:
+
+- `.env` must have `POSTGRES_PASSWORD`, and `DATABASE_URL` / `SYNC_DATABASE_URL` must use the SAME password (the compose
+  file builds its own URLs from `POSTGRES_PASSWORD`; the host-side tools read the two URLs). A volume created earlier keeps
+  its old role password until you rotate it: `docker exec project-ex2-postgres-1 psql -U postgres -c "ALTER USER postgres PASSWORD '<new>'"`.
+- The Angel session written by the host CLI (`setup connect`, see above) lives in `~/.local/state/pie`; compose mounts it
+  read-only into the API and worker at `/angel-session`. Reconnect on the host each day (sessions end at midnight IST); the
+  containers pick the new session up without a restart. Keep the VPN on, since the containers share the host's network route.
+- The old Nifty recommendation pipeline is OFF (`LEGACY_PIPELINE_ENABLED=false`): the worker only runs portfolio jobs and
+  the old dashboard's "Run Analysis" is refused with an explanation. Set it to `true` in `.env` to use the old flow.
+- Watchlist: open Watchlist, press "Load it now" once to download Angel's public stock list, then add stocks. Prices
+  refresh every 30s while the market is open and a session is connected.

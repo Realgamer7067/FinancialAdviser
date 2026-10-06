@@ -19,11 +19,11 @@
 
   /* Semantic (gain/loss/caution) colors stay green/red/amber regardless of
      brand accent -- they encode market meaning, not brand identity. */
-  --color-positive: 5 150 105;
+  --color-positive: 4 120 87;
   --color-positive-subtle: 236 253 245;
   --color-negative: 220 38 38;
   --color-negative-subtle: 254 242 242;
-  --color-warning: 217 119 6;
+  --color-warning: 180 83 9;
   --color-warning-subtle: 255 251 235;
 
   /* Dark sidebar -- deliberately a different surface from the light content

@@ -38,7 +38,7 @@ function RoleCard({ output }: { output: CouncilRoleOutput }) {
       <Card className="h-full">
         <div className="mb-2 flex items-center gap-2">
           <Icon className="h-4 w-4 text-accent" />
-          <h4 className="font-medium text-text-primary">{meta.label}</h4>
+          <h3 className="font-medium text-text-primary">{meta.label}</h3>
         </div>
         {tags.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
@@ -76,7 +76,7 @@ function JudgeCallout({ output }: { output: CouncilRoleOutput }) {
       <Card className="border-accent/30 bg-accent-subtle/40">
         <div className="mb-2 flex items-center gap-2">
           <MessagesSquare className="h-4 w-4 text-accent" />
-          <h4 className="font-medium text-text-primary">Judge's verdict</h4>
+          <h3 className="font-medium text-text-primary">Judge's verdict</h3>
         </div>
         {c.rationale && <p className="text-sm text-text-muted">{c.rationale}</p>}
         {hasDisagreement && (

@@ -1,0 +1,56 @@
+[
+ {
+  "symbol": "RELIANCE",
+  "isin": "INE002A01018",
+  "exDate": "28-Oct-2024",
+  "subject": "Bonus 1:1",
+  "series": "EQ"
+ },
+ {
+  "symbol": "RELIANCE",
+  "isin": "INE002A01018",
+  "exDate": "05-Jun-2026",
+  "subject": "Dividend - Rs 6 Per Share",
+  "series": "EQ"
+ },
+ {
+  "symbol": "RELIANCE",
+  "isin": "INE002A01018",
+  "exDate": "20-Jul-2023",
+  "subject": "Demerger",
+  "series": "EQ"
+ },
+ {
+  "symbol": "KOTAKBANK",
+  "isin": "INE237A01036",
+  "exDate": "14-Jan-2026",
+  "subject": "Face Value Split (Sub-Division) - From Rs 5/- Per Share To Re 1/- Per Share",
+  "series": "EQ"
+ },
+ {
+  "symbol": "KOTAKBANK",
+  "isin": "INE237A01036",
+  "exDate": "14-Jan-2026",
+  "subject": "Face Value Split (Sub-Division)  - From Rs 5/- Per Share To Re 1/- Per Share",
+  "series": "EQ"
+ },
+ {
+  "symbol": "SILGO",
+  "isin": "INE0A3N01012",
+  "exDate": "05-Jan-2026",
+  "subject": "Rights 3:10 @ Premium Rs 50/-",
+  "series": "EQ"
+ },
+ {
+  "symbol": "BADROW",
+  "isin": "",
+  "exDate": "-",
+  "subject": "Bonus 1:1"
+ },
+ {
+  "symbol": "",
+  "exDate": "05-Jan-2026",
+  "subject": "Bonus 1:1"
+ },
+ "not a dict"
+]

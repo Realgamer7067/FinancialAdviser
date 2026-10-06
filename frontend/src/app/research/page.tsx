@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { FlaskConical } from "lucide-react";
@@ -162,8 +162,9 @@ function ResultView({ session }: { session: ResearchSessionOut }) {
 
         {session.state === "ready_to_publish" && session.synthesis_error && (
           <p className="mt-3 rounded-md border border-dashed border-border bg-bg px-3 py-2 text-xs text-text-muted">
-            Retrieval and verification are complete, but this session has <strong>not</strong> been synthesized into a
-            report: {session.synthesis_error} -- what you see below is the raw evidence state, not a finished report.
+            No report was written: {session.synthesis_error}.
+            {session.synthesis_error.includes("no evidence") && " Nothing could be read for this question, usually because the company name was not recognised in the news or the sources could not be reached. Try the company's full name, for example \"Reliance Industries\" rather than \"RIL\", or paste addresses into the boxes below."}
+            {" "}What you see below is the evidence state, not a finished report.
           </p>
         )}
 
@@ -229,6 +230,12 @@ export default function ResearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<ResearchSessionOut | null>(null);
 
+  // Arriving from a security page: the company is named for you, the question stays editable.
+  useEffect(() => {
+    const company = new URLSearchParams(window.location.search).get("company");
+    if (company) setQuestion((q) => q || `How is ${company} performing?`);
+  }, []);
+
   async function runSession(q: string, branchFetchUrls: Record<string, string[]>, findSourcesOverride?: boolean) {
     setLoading(true);
     setError(null);
@@ -277,9 +284,10 @@ export default function ResearchPage() {
       <motion.div variants={fadeInUp}>
         <h1 className="text-xl font-semibold text-text-primary">Research</h1>
         <p className="mt-1 text-sm text-text-muted">
-          Runs real retrieval, claim verification, and (once evidence verifies) a synthesized written report against
-          evidence found for your question. Sources come from URLs you paste in, or are found automatically via
-          Gemini search.
+          Gathers evidence about a company, checks each claim against what was actually read, and writes a short report that
+          names what is missing. Sources are the addresses you paste in or, when you leave them empty, recent news headlines
+          (Google News, with publisher and date) and the company&apos;s Wikipedia page. Headlines are not company filings: treat
+          this as a quick, checked read of the news flow, not a replacement for the annual report.
         </p>
       </motion.div>
 
@@ -291,7 +299,7 @@ export default function ResearchPage() {
               <input
                 type="text"
                 required
-                placeholder="e.g. How is Example Bank Ltd performing?"
+                placeholder="e.g. How is Reliance Industries performing?"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 className={INPUT}
@@ -305,7 +313,7 @@ export default function ResearchPage() {
                 onChange={(e) => setFindSources(e.target.checked)}
                 className="accent-accent"
               />
-              Find sources automatically (Gemini search) for any branch left empty below
+              Find sources automatically for any branch left empty below (news headlines and Wikipedia)
             </label>
             {findSources && (
               <p className="rounded-md border border-dashed border-border bg-bg px-3 py-2 text-xs text-text-muted">

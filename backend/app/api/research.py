@@ -156,6 +156,13 @@ async def create_research_session(
         branch_fetch_urls=branch_fetch_urls,
         retrieval_policy=_DEFAULT_RETRIEVAL_POLICY,
     )
+    # Persist what previously existed only in this synchronous response, so a later GET can restore it.
+    v = result.verification
+    result.session.verification = None if v is None else {
+        "total_material_claims": v.total_material_claims, "supported_count": v.supported_count, "unsupported_count": v.unsupported_count,
+        "unknown_count": v.unknown_count, "contradicted_count": v.contradicted_count,
+        "unresolved_critical_claim_ids": v.unresolved_critical_claim_ids, "fully_verifiable": v.fully_verifiable}
+    result.session.contradictions = result.contradictions
     await db.commit()
 
     report_content: dict | None = None
@@ -204,8 +211,8 @@ async def get_research_session(session_id: UUID, db: AsyncSession = Depends(get_
         question=session.question,
         named_gaps=session.named_gaps or [],
         branches=[BranchOut.model_validate(b) for b in branches],
-        verification=None,
-        contradictions=[],
+        verification=VerificationOut(**session.verification) if session.verification else None,
+        contradictions=session.contradictions or [],
         stopped_reason=session.budget_exhausted_reason,
         report=report_content,
     )

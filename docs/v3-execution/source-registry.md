@@ -40,3 +40,10 @@ This corpus does not satisfy Section 9.1's "extend to the existing Nifty50
 universe after parser and coverage tests pass" step -- that still requires
 a real, reviewed document source, which remains unresolved (see
 `docs/v3-execution/STATE.md`).
+
+
+## Portfolio Intelligence Engine addendum: Angel One SmartAPI
+
+| Source | Used for | Access | Freshness | Rights/notes | Parser/version |
+|---|---|---|---|---|---|
+| Angel One SmartAPI (`apiconnect.angelone.in`) | Read-only: `getProfile` (identity check), `getAllHolding`, `getPosition` and `getRMS` (separate coverage buckets, not valued), batched `quote` (adapter only, not yet used by sync) | User's own SmartAPI app key + operator-typed client code/PIN/TOTP; session ends midnight IST; local single-user only | Holdings payload carries LTP but no exchange timestamp: values are dated by retrieval time. Quote `FULL` may carry exchange time (unverified) | Personal use of own data. Redistribution/caching rights for market data NOT reviewed; no public display. Raw candles not fetched (adjustment basis unverified). Docs disagree on rate limit (1/s vs 10/s): client uses 1/s | `portfolio_intelligence/sources/angel/` (`angel-holdings-v1`); response shapes from public docs, live shape unverified until the live spike |

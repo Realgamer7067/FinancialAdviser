@@ -26,6 +26,8 @@ pre-search-tool behavior, never worse than before this module existed.
 """
 
 import logging
+import re
+from urllib.parse import quote_plus, quote
 
 import httpx
 
@@ -89,6 +91,61 @@ _BRANCH_QUERY_SUFFIX = {
 }
 
 
+_QUESTION_FILLER = {"how", "is", "are", "was", "were", "what", "whats", "why", "does", "do", "did", "the", "a", "an", "about", "of", "on", "performing", "performance",
+                    "doing", "going", "looking", "tell", "me", "please", "should", "i", "buy", "company", "stock", "share", "shares", "its", "it", "recently", "lately", "now", "recent"}
+_NEWS_QUERY = {
+    "financials_valuation": '"{s}" (results OR revenue OR profit OR earnings OR valuation) when:90d',
+    "events_governance": '"{s}" (management OR board OR SEBI OR regulator OR acquisition OR announcement) when:30d',
+    "peers_downside": '"{s}" (competition OR competitors OR risk OR outlook OR downgrade) when:90d',
+}
+_WIKI_API = "https://en.wikipedia.org/w/api.php"
+
+
+def subject_of(question: str) -> str:
+    """The company name left after the question boilerplate is removed ("How is Reliance Industries performing?" -> "Reliance Industries")."""
+    words = [w for w in re.findall(r"[A-Za-z0-9&.'-]+", question) if w.lower() not in _QUESTION_FILLER]
+    return " ".join(words[:6]) or question[:60]
+
+
+def news_feed_url(subject: str, branch_type: str) -> str | None:
+    template = _NEWS_QUERY.get(branch_type)
+    if not template or not subject.strip():
+        return None
+    return f"https://news.google.com/rss/search?q={quote_plus(template.format(s=subject))}&hl=en-IN&gl=IN&ceid=IN:en"
+
+
+async def wikipedia_url(subject: str) -> str | None:
+    """The company's Wikipedia article, only when its title plainly matches the subject (never a near miss for a different company)."""
+    try:
+        async with httpx.AsyncClient(timeout=_SEARCH_TIMEOUT_SECONDS) as client:
+            r = await client.get(_WIKI_API, params={"action": "opensearch", "search": subject, "limit": 1, "format": "json"})
+            r.raise_for_status()
+            _q, titles, _d, urls = r.json()
+    except (httpx.HTTPError, ValueError, TypeError):
+        return None
+    if not titles or not urls:
+        return None
+    first = subject.split()[0].lower()
+    return urls[0] if first in titles[0].lower() else None
+
+
+async def discover_known_sources(question: str, branch_type: str) -> list[str]:
+    """Fixed, keyless sources for when search grounding returns nothing (its free-tier quota normally is exhausted): a Google News RSS search
+    for the company, scoped to what the branch asks, and, for the financials branch, the company's Wikipedia article. Like any discovered
+    address these only DISCOVER material; each still goes through fetch, extraction and verification. Search engines were tried first and
+    block this machine's VPN address."""
+    subject = subject_of(question)
+    urls = []
+    feed = news_feed_url(subject, branch_type)
+    if feed:
+        urls.append(feed)
+    if branch_type == "financials_valuation":
+        wiki = await wikipedia_url(subject)
+        if wiki:
+            urls.append(wiki)
+    return urls
+
+
 async def discover_branch_urls(question: str, branch_type: str, *, api_key: str | None = None) -> list[str]:
     """Branch-scoped search query -- each of the 3 standard research
     branches asks a topically distinct question rather than sharing one
@@ -96,4 +153,7 @@ async def discover_branch_urls(question: str, branch_type: str, *, api_key: str 
     same handful of generic result URLs."""
     suffix = _BRANCH_QUERY_SUFFIX.get(branch_type, "")
     query = f"{question} {suffix}".strip()
-    return await discover_urls(query, api_key=api_key)
+    urls = await discover_urls(query, api_key=api_key)
+    if not urls and settings.web_search_fallback:
+        urls = await discover_known_sources(question, branch_type)
+    return urls

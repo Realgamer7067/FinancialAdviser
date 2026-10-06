@@ -90,6 +90,7 @@ function ComparePageInner() {
           <Card key={i} className="p-3">
             <label className="block text-xs font-medium text-text-muted">Slot {i + 1}</label>
             <select
+              aria-label={`Stock for slot ${i + 1}`}
               value={candidates.includes(symbols[i]) ? symbols[i] : ""}
               onChange={(e) => setSlot(i, e.target.value)}
               className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
