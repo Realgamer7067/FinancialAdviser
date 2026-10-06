@@ -192,7 +192,14 @@ npm run dev
 | `ANGEL_API_KEY`, `ANGEL_FINGERPRINT_KEY` | Read-only broker connection through the local operator CLI |
 | `ALLOW_FORWARDED_ORIGINS=false` | Forwarded origins disabled; the v4 write guard has separate origin restrictions |
 
-Angel login takes place privately in the owner's terminal. Compose mounts the host session directory read-only into API and worker. See [SETUP.md](SETUP.md#angel-one-read-only-connection).
+Angel login takes place privately in the owner's terminal. From the repository root, use these commands in bash or fish; activation is not required:
+
+```bash
+cd backend
+.venv/bin/python -m app.portfolio_intelligence.sources.angel.setup connect
+```
+
+In fish, optional activation is `source .venv/bin/activate.fish`. Compose mounts the host session directory read-only into API and worker. See [SETUP.md](SETUP.md#angel-one-read-only-connection).
 
 ## Validation
 

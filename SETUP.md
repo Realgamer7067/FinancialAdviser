@@ -395,13 +395,17 @@ the repo root specifically for this. Keep any dump file local-only.
 1. In `.env` set `ANGEL_API_KEY` (from your SmartAPI app) and `ANGEL_FINGERPRINT_KEY`
    (`openssl rand -hex 32`, keep a backup).
 2. Run migrations (`alembic upgrade head`) and start API and worker (`run.sh` does both). Local processes share the session in `~/.local/state/pie`. Current Docker Compose mounts that host directory read-only into both services at `/angel-session`; the local-only-worker limitation from the initial integration no longer applies.
-3. In your own terminal: `python -m app.portfolio_intelligence.sources.angel.setup connect`
-   (from `backend/`, venv active). Enter client code, PIN and the current TOTP when
+3. In your own terminal: `.venv/bin/python -m app.portfolio_intelligence.sources.angel.setup connect`
+   (from `backend/`; no activation required, works in bash and fish). Enter client code, PIN and the current TOTP when
    prompted. Nothing secret is printed or stored except the session tokens, which expire at
-   midnight IST. `... setup disconnect` clears the session; imported holdings stay.
+   midnight IST. `.venv/bin/python -m app.portfolio_intelligence.sources.angel.setup disconnect` clears the session; imported holdings stay.
 4. Open Holdings, press "Sync now". A sync that finds unreadable rows or a >1% mismatch
    with Angel's own total is stored as *partial* and does not replace your last complete
    import.
+
+To check the session, run `.venv/bin/python -m app.portfolio_intelligence.sources.angel.setup status` from `backend/`.
+
+If you prefer activation, fish uses `source .venv/bin/activate.fish`; bash uses `source .venv/bin/activate`. Use the project environment for dependency installation: `uv pip install --python .venv/bin/python -r requirements.txt`. Installing into system Python does not install packages into this virtual environment.
 
 ## Running everything in Docker (private, this machine only)
 
